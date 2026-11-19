@@ -6,9 +6,10 @@
                       ┌──────────────── HOST (GPU) ─────────────────────────────────┐
   video file ─┐       │                                                              │
   image dir  ─┼─► sources.py ─► detector.py ─────► counting.py ──► events.py ──┬──► events.csv / tracks.csv
-  RTSP stream ┘   FrameSource    YOLO26 +          LineCounter     Event       │    summary.json
-                  (frame, ts,    ByteTrack /       zones.py (P4)   (anonymous) │    annotated.mp4 (draw.py)
-                   image)        BoT-SORT          heatmap.py (P4)             │
+  RTSP stream ┘   FrameSource    YOLO26 +          LineCounter     Event       │    summary.json, heatmap.npy/.png
+                  (frame, ts,    BoT-SORT          zones.py        (anonymous) │    annotated.mp4 (draw.py,
+                   image)        (profile)         heatmap.py                  │     privacy.py head blur)
+                                                   staff.py, static_filter.py  │
                                  → TrackedPerson                               └──► HTTP POST (Phase 5)
                       │          (id, box, conf)                                         │
                       │  config.py: scenes/<camera>.json (line, IN side, band, zones, homography)
@@ -32,6 +33,13 @@
 | `retailflow/sources.py` | One iterator for video files, image folders and RTSP; yields `(index, timestamp, image)` |
 | `retailflow/detector.py` | `PersonTracker`: YOLO26 + tracker → list of `TrackedPerson(id, box, conf)` with `feet` / `centre` |
 | `retailflow/counting.py` | Line geometry, band/hysteresis crossing logic, min track age, once-per-direction |
+| `retailflow/profiles.py` | Detector profiles (`standard` 960 px, `crowd` 1920 px), chosen per scene |
+| `retailflow/zones.py` | Feet-in-polygon, debounced zone visits, dwell time, occupancy |
+| `retailflow/heatmap.py` | Person-seconds grid (image or floor plan via homography), rendering, similarity |
+| `retailflow/staff.py` | Staff rule: time in staff zones → `staff_flag` |
+| `retailflow/static_filter.py` | Never-moving tracks (mannequins) → `static_flag` (per-camera switch) |
+| `retailflow/privacy.py` | `--blur-heads`: pixelate the head region of each person in output images |
+| `retailflow/analytics_eval.py` | Zones / heatmap / staff evaluation against ground truth (`evaluate_zones.py`) |
 | `retailflow/events.py` | Anonymous `Event` schema and CSV writer |
 | `retailflow/draw.py` | Overlays for the annotated video (line, band, IN arrow, boxes, feet, HUD) |
 | `retailflow/pipeline.py` | The per-frame loop tying everything together; writes all outputs |
@@ -51,12 +59,16 @@ Every analytic output is an `Event` (see `retailflow/events.py`):
 | `camera_id` | str | `caviar_front` | which camera |
 | `frame` | int | 812 | frame index in the source |
 | `timestamp` | float | 32.48 | seconds on the **video timeline** (files) or since stream start (live) |
-| `type` | str | `line_cross` | `line_cross`, `zone_enter`, `zone_exit`, `occupancy` (P4) |
+| `type` | str | `line_cross` | `line_cross`, `zone_enter`, `zone_exit`, `occupancy`, `staff_flag`, `static_flag` |
 | `track_id` | int | 17 | session-local integer, not linked to any identity |
 | `direction` | str | `in` | for `line_cross` |
-| `zone` | str | `checkout` | for zone events (P4) |
+| `zone` | str | `shop_inside` | for zone and occupancy events |
 | `x`, `y` | float | 270.5, 140.0 | anchor point in pixels at the event |
-| `value` | float | 4 | occupancy count / dwell seconds (P4) |
+| `value` | float | 4 | occupancy count (`occupancy`) / dwell seconds (`zone_exit`) |
+| `staff` | bool | false | track already flagged staff when the event was emitted |
+
+`staff_flag` and `static_flag` work **retroactively**: consumers drop every event of a
+flagged `track_id`, including events emitted before the flag (see doc 06).
 
 No images, crops or appearance features are ever stored (see Privacy below).
 
@@ -89,5 +101,5 @@ No images, crops or appearance features are ever stored (see Privacy below).
 
 - Stored data: camera ID, frame/time, integer track ID, positions, zone names, directions.
 - Never stored: images (except the optional demo video), face crops, identities,
-  ReID embeddings. ReID features exist only in tracker memory during a run (Phase 3).
-- Demo videos use `--blur-heads` (Phase 4).
+  ReID embeddings. ReID features exist only in tracker memory during a run.
+- Demo videos use `--blur-heads`. Details: `06_STAFF_AND_PRIVACY.md`.

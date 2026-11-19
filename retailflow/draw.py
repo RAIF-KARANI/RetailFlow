@@ -9,6 +9,7 @@ from retailflow.config import LineConfig
 from retailflow.detector import TrackedPerson
 
 GREEN, RED, YELLOW, WHITE, BLACK = (0, 200, 0), (0, 0, 230), (0, 220, 255), (255, 255, 255), (0, 0, 0)
+CYAN, ORANGE = (230, 200, 0), (0, 140, 255)
 
 
 def _ipt(p) -> tuple[int, int]:
@@ -38,13 +39,28 @@ def draw_line(image: np.ndarray, line: LineConfig, band: float) -> None:
     cv2.putText(image, "IN", _ipt(mid + normal * 50 * s), cv2.FONT_HERSHEY_SIMPLEX, 0.8 * s, GREEN, max(1, int(2 * s)))
 
 
-def draw_people(image: np.ndarray, people: list[TrackedPerson], point_mode: str) -> None:
-    """Boxes, IDs and the anchor point used for counting."""
+def draw_zones(image: np.ndarray, zones, occupancy: dict[str, int] | None = None) -> None:
+    """Zone outlines with name and current occupancy."""
     s = scale_for(image)
+    for z in zones:
+        pts = np.array([_ipt(p) for p in z.polygon], np.int32)
+        cv2.polylines(image, [pts], True, CYAN, max(1, int(2 * s)), cv2.LINE_AA)
+        label = z.name if occupancy is None else f"{z.name}: {occupancy.get(z.name, 0)}"
+        cv2.putText(image, label, _ipt((pts[:, 0].min() + 3, pts[:, 1].min() + 14 * s)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5 * s, CYAN, max(1, int(s)))
+
+
+def draw_people(image: np.ndarray, people: list[TrackedPerson], point_mode: str,
+                staff: set[int] | None = None) -> None:
+    """Boxes, IDs and the anchor point used for counting. Staff tracks are drawn orange."""
+    s = scale_for(image)
+    staff = staff or set()
     for p in people:
-        cv2.rectangle(image, _ipt((p.x1, p.y1)), _ipt((p.x2, p.y2)), WHITE, max(1, int(2 * s)))
-        cv2.putText(image, str(p.track_id), _ipt((p.x1, p.y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6 * s, WHITE, max(1, int(2 * s)))
+        col = ORANGE if p.track_id in staff else WHITE
+        tag = f"{p.track_id} staff" if p.track_id in staff else str(p.track_id)
+        cv2.rectangle(image, _ipt((p.x1, p.y1)), _ipt((p.x2, p.y2)), col, max(1, int(2 * s)))
+        cv2.putText(image, tag, _ipt((p.x1, p.y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6 * s, col, max(1, int(2 * s)))
         anchor = p.feet if point_mode == "feet" else p.centre
         cv2.circle(image, _ipt(anchor), max(2, int(5 * s)), RED, -1)
 

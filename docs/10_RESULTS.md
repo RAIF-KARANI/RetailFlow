@@ -205,7 +205,25 @@ busy 25.8% → 25.8% (baseline → final). Mean IDF1: dev 0.687 → 0.718; MOT20
 
 ## 3. Zones, dwell, heatmaps (Phase 4)
 
-TODO: run and fill in.
+Full method and per-zone tables: [`05_ZONES_DWELL_HEATMAP.md`](05_ZONES_DWELL_HEATMAP.md). Staff and privacy:
+[`06_STAFF_AND_PRIVACY.md`](06_STAFF_AND_PRIVACY.md). Final tracks, scored by `python evaluate_zones.py`.
+
+| Camera | Split | Visit WAPE | Time-in-zone WAPE | Occupancy MAE | Heatmap correlation |
+|---|---|---|---|---|---|
+| `caviar_cor` | dev | 20.1% | 15.5% | 0.22 people | 0.93 |
+| MOT17-09 | dev | 25.0% | 35.9% | 1.11 people | 0.72 |
+| `caviar_front` | test | 48.8% | 49.8% | 0.17 people | 0.31 |
+| MOT20-01/02/03 | test | (no zones) | | | 0.81–0.87 |
+| MOT20-05 | test | (no zones) | | | 0.23 |
+
+- Zone debounce (2 s / 2 s) was chosen on dev. It cut dev visit over-counting from up to
+  243% to 27% while time-in-zone stayed about the same, so ID breaks were the cause.
+- The static-object filter (mannequins) was added after a test-camera diagnosis, checked
+  on dev (corridor time-in-zone error 22.4% → 15.5%) and on ground truth (it would remove 26%
+  of real people on the MOT17-04 street, so it is a per-camera switch).
+- Staff rule: correctly found the assistant in 1 of 2 `ShopAssistant` clips. In the
+  other it flagged a mannequin, because the assistant's track kept breaking.
+- The shop-front camera is the weak case: walkway people hidden by the glass railing are under-detected.
 
 ## 4. Streaming and performance (Phase 6)
 

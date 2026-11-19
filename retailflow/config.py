@@ -12,7 +12,9 @@ A scene describes everything that depends on WHERE the camera is mounted:
     "in_point": [150, 250],              # any point on the IN side of the line
     "band_px": 5                         # half-width of the hysteresis band
   },
-  "zones": [{"name": "entrance", "polygon": [[x, y], ...]}],     # Phase 4
+  "zones": [{"name": "entrance", "polygon": [[x, y], ...]}],     # dwell / occupancy
+  "staff": {"zones": ["shop_inside"], "min_seconds": 45},       # optional staff rule
+  "static_filter": true,                 # optional: drop mannequins / never-moving tracks
   "homography": {"image_points": [[x, y] x4], "floor_points": [[X, Y] x4]}  # Phase 4
 }
 
@@ -58,6 +60,14 @@ class Homography:
 
 
 @dataclass(frozen=True)
+class StaffRule:
+    """Tracks spending >= min_seconds in any of these zones are staff (retailflow/staff.py)."""
+
+    zones: tuple[str, ...]
+    min_seconds: float = 45.0
+
+
+@dataclass(frozen=True)
 class Scene:
     camera_id: str
     frame_size: tuple[int, int]
@@ -66,6 +76,8 @@ class Scene:
     homography: Homography | None = None
     description: str = ""
     profile: str = "standard"  # detector profile, see retailflow/profiles.py
+    staff: StaffRule | None = None
+    static_filter: bool = False  # drop never-moving tracks (mannequins), retailflow/static_filter.py
     extra: dict = field(default_factory=dict)  # free-form settings (staff rules etc.)
 
 
@@ -92,6 +104,12 @@ def scene_from_dict(d: dict) -> Scene:
     profile = d.get("profile", "standard")
     if profile not in PROFILES:
         raise ValueError(f"{d['camera_id']}: unknown profile '{profile}'")
+    staff = None
+    if d.get("staff"):
+        staff = StaffRule(tuple(d["staff"]["zones"]), float(d["staff"].get("min_seconds", 45.0)))
+        unknown = set(staff.zones) - {z.name for z in zones}
+        if unknown:
+            raise ValueError(f"staff rule uses unknown zone(s): {sorted(unknown)}")
     return Scene(
         camera_id=d["camera_id"],
         frame_size=tuple(d["frame_size"]),
@@ -100,6 +118,8 @@ def scene_from_dict(d: dict) -> Scene:
         homography=homo,
         description=d.get("description", ""),
         profile=profile,
+        staff=staff,
+        static_filter=bool(d.get("static_filter", False)),
         extra=d.get("extra", {}),
     )
 
@@ -119,6 +139,10 @@ def scene_to_dict(s: Scene) -> dict:
             "floor_points": [list(p) for p in s.homography.floor_points],
         },
     }
+    if s.static_filter:
+        d["static_filter"] = True
+    if s.staff:
+        d["staff"] = {"zones": list(s.staff.zones), "min_seconds": s.staff.min_seconds}
     if s.extra:
         d["extra"] = s.extra
     return d

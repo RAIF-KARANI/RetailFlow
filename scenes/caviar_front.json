@@ -21,6 +21,77 @@
     ],
     "band_px": 5.0
   },
-  "zones": [],
-  "homography": null
+  "zones": [
+    {
+      "name": "shop_inside",
+      "polygon": [
+        [
+          205.0,
+          65.0
+        ],
+        [
+          335.0,
+          65.0
+        ],
+        [
+          335.0,
+          138.0
+        ],
+        [
+          205.0,
+          138.0
+        ]
+      ]
+    },
+    {
+      "name": "window_walkway",
+      "polygon": [
+        [
+          50.0,
+          145.0
+        ],
+        [
+          200.0,
+          145.0
+        ],
+        [
+          200.0,
+          175.0
+        ],
+        [
+          50.0,
+          175.0
+        ]
+      ]
+    },
+    {
+      "name": "entrance_walkway",
+      "polygon": [
+        [
+          200.0,
+          145.0
+        ],
+        [
+          340.0,
+          145.0
+        ],
+        [
+          340.0,
+          175.0
+        ],
+        [
+          200.0,
+          175.0
+        ]
+      ]
+    }
+  ],
+  "homography": null,
+  "static_filter": true,
+  "staff": {
+    "zones": [
+      "shop_inside"
+    ],
+    "min_seconds": 45.0
+  }
 }

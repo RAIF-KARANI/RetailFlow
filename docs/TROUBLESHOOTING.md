@@ -42,3 +42,28 @@ Format: **problem → cause → fix**. Newest at the bottom.
   but only 1125 MHz and ~30 W.
 - **Effect:** speed only. Detection results do not depend on clock speed, so accuracy numbers are valid.
 - **Action:** speed numbers are re-measured in Phase 6 in performance mode.
+
+### Background runs show an empty log
+- **Cause:** Python buffers stdout when it is piped to a file.
+- **Fix:** run background jobs with `python -u`.
+
+## Phase 3
+
+### Packed crowds: almost nobody detected (MOT20-05)
+- **Symptom:** 74% counting error on MOT20; about 19 tracks per frame for 195 people.
+- **Diagnosis:** the problem is raw detection, not tracking: about 34 boxes with conf ≥ 0.1 at 960 px vs about 128 at 1920 px.
+  `iou` and `max_det` changed nothing (YOLO26 is NMS-free).
+- **Fix:** per-camera `crowd` profile at full resolution (doc 10 §2.3).
+
+## Phase 4
+
+### Seeking in CAVIAR MPEG-2 files returns wrong frames
+- **Symptom:** `cv2.CAP_PROP_FRAME_COUNT` reported 18 frames for a 1,675-frame clip, and
+  `cap.set(CAP_PROP_POS_FRAMES, n)` returned the wrong images.
+- **Cause:** the MPEG-2 files have no reliable index for random access.
+- **Fix:** always read CAVIAR videos sequentially (`FrameSource`), never seek.
+
+### Mannequins counted as people in zones and heatmaps
+- **Symptom:** the hottest predicted heatmap spots were inside the shop, where the ground truth has nobody;
+  one "person" was present in every frame of `ShopAssistant1front`.
+- **Fix:** static-object filter, switched on per camera (doc 05 §5).

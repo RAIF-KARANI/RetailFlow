@@ -143,3 +143,44 @@ honest before/after on unseen test cameras including busy scenes.
 ### Phase 3 status
 - Done and committed. Open: MOT20-02 over-counting and MOT20-05 recall (known limitations);
   crowd-profile speed (83–112 ms/frame) is a Phase 6 topic.
+
+---
+
+## Phase 4: Zones, dwell, heatmaps, staff, blur
+
+**Goal:** the "if possible" analytics (zones, dwell, heatmaps), scored against ground
+truth like counting, plus staff filtering and head blurring.
+
+### 4.1 Zones placed from traffic plots
+- Drew ground-truth feet heatmaps over each camera and placed zones where people walk and stop
+  (CAVIAR corridor: 3, shop front: 3, MOT17-09: 2). Saved in the scene files.
+
+### 4.2 Modules
+- `zones.py` (debounced visits, dwell, occupancy), `heatmap.py` (person-seconds grid, optional
+  floor homography, median background), `staff.py`, `static_filter.py`, `privacy.py` (head pixelation).
+- Pipeline emits `zone_enter`/`zone_exit`/`occupancy`/`staff_flag`/`static_flag` events and writes
+  `heatmap.npy` + `heatmap.png`. `run.py --blur-heads`.
+- **Learned:** track-level decisions (staff? mannequin?) are only possible when a track ends, so
+  the pipeline buffers each track's heatmap cells until then.
+
+### 4.3 Evaluation (`evaluate_zones.py`)
+- Same zone/heatmap code on ground truth and on predictions.
+- Debounce sweep on dev: short settings over-count visits by up to 3× (every ID break = a new visit).
+  Chose 2 s / 2 s: dev visit WAPE 26.9%, with time-in-zone about the same (≈23%).
+- **Learned:** dwell time is far more robust than visit counts; visit counts depend on ID stability.
+
+### 4.4 Mannequins and staff
+- Test-camera heatmap correlation was only 0.15: the hottest predicted spots were mannequins.
+  Added a static-object filter (post-diagnosis, like the crowd profile). Checked on dev (corridor
+  0.80 → 0.93) and on ground truth (it would remove 26% of real people on the MOT17-04 street), so it is a per-camera switch.
+- CAVIAR has no staff labels. The staff rule (45 s in the shop) found the real assistant in 1 of 2
+  clips; in the other the assistant's track broke into 8+ IDs. Reported as not reliable on this camera.
+- Fixed my own evaluation mistake: the staff rule must be applied to ground truth too, otherwise
+  removing real staff from predictions looks like an error.
+
+### 4.5 Tests
+- `pytest -q` → 58 passed.
+
+### Phase 4 status
+- Done and committed. Open: shop-front walkway under-detection (glass railing); staff rule depends on
+  stable IDs; no floor-plan heatmaps because no dataset has floor measurements.

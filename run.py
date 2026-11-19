@@ -44,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-frames", type=int, default=None)
     p.add_argument("--save-video", action="store_true")
     p.add_argument("--show", action="store_true", help="live preview window (press q to stop)")
+    p.add_argument("--blur-heads", action="store_true",
+                   help="pixelate heads in the saved video / preview (detection still uses the original)")
     p.add_argument("--device", default="0")
     return p
 
@@ -64,7 +66,7 @@ def main() -> None:
     out = Path(args.out or f"outputs/run_{scene.camera_id}")
     run_info = {"profile": profile_name, "model": model, "tracker": tracker_name,
                 "imgsz": imgsz, "conf": conf}
-    summary = Pipeline(scene, tracker, counting, out, args.save_video, run_info).run(
+    summary = Pipeline(scene, tracker, counting, out, args.save_video, run_info, blur=args.blur_heads).run(
         FrameSource(args.source, fps=args.fps, max_frames=args.max_frames), show=args.show)
     print(json.dumps(summary, indent=2))
     print(f"Outputs in {out}")
