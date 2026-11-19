@@ -253,3 +253,34 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 
 ### Phase 6 status
 - Done and committed. Not done: GPU video decoding, batched multi-camera inference (doc 08 §6).
+
+---
+
+## Phase 7: Multi-camera
+
+**Goal:** use CAVIAR's two simultaneous views (corridor + shop front) together; MMPTRACK if feasible.
+
+### 7.1 MMPTRACK
+- Official page checked: research use only, signed agreement e-mailed to the organisers, no public link or size.
+  Not requested (that is the owner's decision; turnaround does not fit). Documented in `tools/download_data.md`.
+
+### 7.2 Time sync from the burned-in clock
+- `retailflow/osd_clock.py`: template matching on the 8 px bitmap clock, 31 labelled glyph shapes,
+  strict accept rule; `fit_start` = robust (median) start per clip.
+- All 72,518 frames readable, 0 outliers. Front view starts 3.04–3.12 s before the corridor view (25/26 clips).
+- **Learned:** first template set (4 clips) misread a "0" as "8"; collecting from all clips + a margin rule fixed it.
+- Independent check with ground truth: front threshold crossings coincide with corridor track starts/ends
+  60% of the time at the clock sync (the peak), 14–28% when shifted by ±2 s, 19% at random moments.
+
+### 7.3 Two cameras, one door
+- The Promod door is visible at the corridor view's left edge. Door line placed from the ground-truth
+  coincidences; site file `scenes/sites/caviar_promod.json`; `retailflow/multicam.py` fuses crossings by time.
+- `evaluate_multicam.py`: front only 14 errors / 72; corridor only 61; union 16–22; intersection 63–69.
+  **The second camera does not help here**: the door is at its image edge (recall 0.73 vs 0.92).
+
+### 7.4 Tests
+- `pytest -q` → 85 passed (clock reading on synthetic and real frames, robust start fit, fusion, site file).
+
+### Phase 7 status
+- Done and committed. Not built: dashboard site page on the recording clock; cross-camera re-identification
+  (no cross-view identity labels to test it).

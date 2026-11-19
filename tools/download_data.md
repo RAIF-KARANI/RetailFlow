@@ -16,7 +16,7 @@ retail CCTV. No overhead (top-down) views and no moving cameras.
 | CAVIAR (Portugal shopping centre) | counting, zones, dwell, multi-camera | 2 static views per scene: angled down the corridor ("cor") and facing the shop fronts ("front") | 581 MB (52 videos + 52 GT files) | Creative Commons BY-SA; acknowledge the EC-funded CAVIAR project (IST 2001 37540) |
 | MOT17 (static train sequences 02, 04, 09) | counting and tracking in medium/busy scenes | static, elevated, angled street/square views | 5.6 GB zip, ~1 GB extracted for 3 sequences | CC BY-NC-SA 3.0 (MOTChallenge) |
 | MOT20 (train sequences) | very busy scenes | static, elevated, angled | 4.8 GB zip (Phase 3) | CC BY-NC-SA 3.0 (MOTChallenge) |
-| MMPTRACK | multi-camera (only if feasible) | calibrated multi-view, includes retail | TODO: check size in Phase 7 | Research use; TODO: confirm terms in Phase 7 |
+| MMPTRACK | multi-camera (only if feasible) | calibrated multi-view, includes retail | not downloaded (no public link; size not published) | Research use only; signed user agreement e-mailed to the organisers |
 
 ## 1. CAVIAR
 
@@ -32,8 +32,8 @@ Video is 384x288 at 25 fps (half-resolution PAL, MPEG-2). Ground truth is CVML
 XML with centre-based boxes (`<box xc yc w h>`) per `<object id>` per `<frame number>`.
 
 Caveats (from the dataset page and our own inventory):
-- The two views are **not guaranteed frame-aligned**: each may start at a
-  slightly different time. Use the on-screen time code to align (Phase 7).
+- The two views are **not frame-aligned**: measured from the on-screen time code, the front
+  view starts 3.04–3.12 s earlier in 25 of 26 clips (`python tools/sync_caviar_views.py`, docs/11).
 - Some front-view ground truth is incomplete (e.g. `OneLeaveShop2front` is only
   labelled up to frame 289 of 1119).
 
@@ -82,9 +82,14 @@ Camera motion (`tools/check_camera_motion.py`) and density:
 MOT20-01 moves slightly more (0.55 px) because with ~50 people per frame little
 background is left to match; it is still well under the 1 px static threshold.
 
-## 4. MMPTRACK (Phase 7, optional)
+## 4. MMPTRACK (Phase 7, optional): not downloaded
 
-TODO: check download size, camera angles and licence before downloading.
+Checked on the official page (<https://iccv2021-mmp.github.io/subpage/dataset.html>):
+research use only. Access requires downloading a user agreement, signing it and e-mailing it to the
+organisers; there is no direct download link and no published size (about 5 h train + 1.5 h validation
+video, 640x320 at 15 fps, 5 environments including retail, calibrated cameras, cross-camera IDs).
+Signing and sending the agreement is the project owner's decision, so it was not requested
+(docs/11_MULTI_CAMERA.md §1).
 
 ## Verify
 

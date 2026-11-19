@@ -124,6 +124,27 @@ Format: **problem → cause → fix**. Newest at the bottom.
   real video), so `run_multi.py` now reads MediaMTX's drop warnings for its run and a stream only
   counts as real time if nothing was dropped. MediaMTX's "frames" in that message are RTP packets.
 
-### Tools in `tools/` could not `import retailflow`
+### Tools in `tools/` could not `import retailflow` (Phase 6)
 - **Cause:** a script's own folder (`tools/`) is first on `sys.path`, not the repo root.
 - **Fix:** each tool inserts the repo root into `sys.path`, as the earlier tools already did.
+
+## Phase 7
+
+### On-screen clock read 8 minutes wrong in some clips
+- **Symptom:** `tools/sync_caviar_views.py` reported hundreds of frames off by exactly 480 s or 300 s in
+  5 clips; `10:20:00.037` was read as `10:28:00.037`.
+- **Cause:** the digit templates came from 4 clips only. A minute "0" in a slightly different shape
+  matched the "8" template within the 3-pixel tolerance.
+- **Fix:** collected glyph shapes from all 52 videos (6 unseen shapes, labelled), and a digit is
+  accepted only if it is ≤ 2 px from a template and ≥ 2 px better than any other digit.
+  Result: 72,518 frames readable, 0 outliers. Four clips' start times changed by 5–8 minutes:
+  the error had also reached the median start.
+
+### Checking a sync by correlating people counts gave noise
+- **Cause:** the two CAVIAR views watch different areas; the same person shows up seconds apart.
+- **Instead:** shop-threshold crossings in one view vs track starts/ends in the other (docs/11 §2).
+
+### My own sync check first paired frames with the wrong sign
+- **Symptom:** the burned-in clocks in a "synchronised" pair read 10:07:52 vs 10:07:58.
+- **Rule:** corridor frame = front frame + `offset_frames` (offset is negative: the front view starts
+  earlier). Looking at the clocks in the rendered pairs caught it at once.

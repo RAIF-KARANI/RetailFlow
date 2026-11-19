@@ -244,4 +244,15 @@ is the limit, not the GPU.
 
 ## 5. Multi-camera (Phase 7)
 
-TODO: run and fill in.
+Full details: [`11_MULTI_CAMERA.md`](11_MULTI_CAMERA.md).
+
+- **Time sync of the two CAVIAR views** from the burned-in clock: all 72,518 frames of 52 videos
+  read, 0 outliers. The front view starts 3.04–3.12 s earlier in 25 of 26 clips. Independently
+  confirmed with ground truth: shop crossings in the front view coincide with corridor track
+  starts/ends 60% of the time at the clock sync (the peak), against 14–28% when shifted by ±2 s
+  and 19% at random moments.
+- **Two-camera door counting** (union / intersection of time-matched crossings) did **not** beat the
+  front camera alone (14 errors on 72 crossings, against 16–22 for union). The corridor camera sees
+  the door at its image edge (recall 0.73 there vs 0.92 elsewhere) and found only 15 of 72 crossings.
+- **MMPTRACK not used:** access requires signing an agreement and e-mailing it; no public download.
+- Cross-camera re-identification not built: CAVIAR has no cross-view identity labels to test it.

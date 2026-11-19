@@ -1,0 +1,10 @@
+{
+  "site_id": "caviar_promod",
+  "description": "CAVIAR Portugal shopping centre: the Promod shop door seen by two cameras. Front camera: the shop threshold line. Corridor camera: the door is on the corridor's left wall; this line was placed where corridor tracks start/end when someone crosses the shop threshold in the front view (docs/11).",
+  "entrance": "promod_door",
+  "match_window_s": 1.0,
+  "cameras": {
+    "caviar_front": {"line": "scene"},
+    "caviar_cor": {"line": {"p1": [70, 130], "p2": [70, 215], "in_point": [40, 170], "band_px": 5}}
+  }
+}
