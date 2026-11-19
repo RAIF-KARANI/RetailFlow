@@ -51,3 +51,50 @@ and one loader that reads all ground truth in the same format.
 
 ### Phase 1 status
 - Done and committed. Open item: re-run the GPU check in performance mode.
+
+---
+
+## Phase 2: Pipeline and evaluation baseline
+
+**Goal:** a working end-to-end pipeline, an honest evaluation, and the "before" numbers.
+
+### 2.1 GPU re-check
+- `python tools/check_gpu.py` gave YOLO26n 22.4 ms/frame (was 55.4), but the GPU was
+  still power-limited during later runs. Speed is deferred to Phase 6.
+
+### 2.2 Choosing counting lines (before running anything)
+- Drew every GT feet point per camera on a frame (traffic plots), then placed lines where
+  people actually cross: across the CAVIAR corridor, on the Promod shop threshold
+  (front view), and across the main flow in each MOT17 scene. Saved as `scenes/*.json`.
+- One scene per **camera**: all 26 corridor clips share `caviar_cor.json`.
+- **Learned:** PowerShell 5.1 writes UTF-8 with a BOM, which breaks `json.loads`. The loader now accepts it.
+
+### 2.3 Core modules
+- `config.py`, `sources.py`, `detector.py`, `counting.py`, `events.py`, `draw.py`, `pipeline.py`, `run.py`.
+- Smoke test: `python run.py --source data/caviar/OneLeaveShop1cor/OneLeaveShop1cor.mpg --scene scenes/caviar_cor.json --save-video`
+  → 295 frames, 9 track IDs, annotated video checked visually (line, band, IN arrow, feet points).
+- **Design:** the pipeline saves every tracked box (`tracks.csv`) so counting variants
+  can be evaluated offline on identical tracks.
+
+### 2.4 Evaluation
+- `retailflow/evaluate.py`: true counts = same line logic on GT feet points with the band
+  (fixed definition); WAPE that cannot cancel errors; IDF1/MOTA via motmetrics.
+- **Learned:** motmetrics' `iou_matrix` uses `np.asfarray` (gone in NumPy 2), so we compute IoU ourselves.
+- Truth sanity check: shop-entrance truth matches clip names (`WalkByShop1front` = 0 crossings,
+  `TwoLeaveShop*` = OUTs only). 210 true crossings over 55 sequences.
+- `tools/setup_scene.py`: click tool for line, IN side, zones, homography.
+- Tests: `pytest -q` → 27 passed.
+
+### 2.5 Baseline run
+- `python benchmark.py --configs baseline` (YOLO26n, ByteTrack, 640): 55 sequences, 74,693 frames, ~1.5 h.
+- `python tools/check_alignment.py`: GT frames line up with decoded frames (peak at offset 0).
+- `python evaluate.py --configs baseline --group camera`:
+  - classic baseline (centre point, simple line): **WAPE 92.4%**, 129 over-counts
+  - feet point + band on the **same tracks**: **WAPE 27.6%**, 16 over-counts
+  - remaining errors are mostly **missed people** (42 of 58), e.g. MOT17-02 recall 0.24 at 640.
+- **Learned:** in angled views the box centre floats above the floor. People walking
+  past a shop had their centre on the threshold line. The feet point is not optional.
+- **Learned:** Python buffers stdout when piped to a file. Use `python -u` for background runs.
+
+### Phase 2 status
+- Done and committed. Next: Phase 3 grid (tracker × model × imgsz), MOT20, min-age tuning.

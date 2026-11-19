@@ -1,0 +1,25 @@
+{
+  "camera_id": "MOT17-02",
+  "description": "MOT17-02 town square, static eye-level camera. Vertical line across the square; IN = walking to the right.",
+  "frame_size": [
+    1920,
+    1080
+  ],
+  "line": {
+    "p1": [
+      1000.0,
+      520.0
+    ],
+    "p2": [
+      1000.0,
+      1080.0
+    ],
+    "in_point": [
+      1300.0,
+      700.0
+    ],
+    "band_px": 15.0
+  },
+  "zones": [],
+  "homography": null
+}

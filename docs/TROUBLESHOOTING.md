@@ -22,3 +22,23 @@ Format: **problem → cause → fix**. Newest at the bottom.
 
 ### The original `.gitignore` was a Flash/ActionScript template
 - **Fix:** replaced it with Python + Node + data/outputs/weights rules.
+
+## Phase 2
+
+### `json.decoder.JSONDecodeError: Expecting value: line 1 column 1` loading a scene
+- **Cause:** Windows PowerShell 5.1 `Out-File -Encoding utf8` writes a UTF-8
+  **byte-order mark** (BOM). Python's `json.loads` rejects it.
+- **Fix:** `load_scene` reads with `encoding="utf-8-sig"` (accepts BOM or no BOM);
+  `save_scene` writes plain UTF-8. Test: `test_loads_file_with_utf8_bom`.
+
+### `motmetrics.distances.iou_matrix` fails: `np.asfarray was removed in the NumPy 2.0 release`
+- **Cause:** motmetrics 1.4.0 still uses a NumPy 1.x function.
+- **Fix:** `retailflow/evaluate.py` computes the IoU distance matrix itself
+  (`iou_distance`, unit-tested) and only uses motmetrics' accumulator and metric
+  functions, which work fine on NumPy 2.5.
+
+### GPU still power-limited during the baseline
+- **Symptom:** pipeline at ~72 ms/frame on 384x288 CAVIAR. `nvidia-smi`: 92% utilisation
+  but only 1125 MHz and ~30 W.
+- **Effect:** speed only. Detection results do not depend on clock speed, so accuracy numbers are valid.
+- **Action:** speed numbers are re-measured in Phase 6 in performance mode.
