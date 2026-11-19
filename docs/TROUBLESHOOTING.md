@@ -16,7 +16,8 @@ Format: **problem → cause → fix**. Newest at the bottom.
   while plugged in, so the laptop power profile was throttling the GPU.
 - **Fix:** set Armoury Crate to *Performance/Turbo* and Windows power mode to
   *Best performance*, then re-run `python tools/check_gpu.py`.
-  TODO: run and fill in the result after switching.
+  Result after switching: `check_gpu.py` 16.3 ms/frame (was 55.4); the GPU reaches about 2,500 MHz
+  under load (clock sampled during the Phase 6 stream tests).
 - **Lesson:** check clocks with `nvidia-smi --query-gpu=pstate,clocks.gr,clocks.max.gr --format=csv`
   before any benchmark, otherwise speed numbers are not comparable.
 
@@ -148,3 +149,10 @@ Format: **problem → cause → fix**. Newest at the bottom.
 - **Symptom:** the burned-in clocks in a "synchronised" pair read 10:07:52 vs 10:07:58.
 - **Rule:** corridor frame = front frame + `offset_frames` (offset is negative: the front view starts
   earlier). Looking at the clocks in the rendered pairs caught it at once.
+
+## Phase 8
+
+### `demo.ps1` stopped at the first `docker compose` call with `NativeCommandError`
+- **Cause:** in Windows PowerShell 5.1, `$ErrorActionPreference = "Stop"` turns any text a native
+  program writes to stderr into a fatal error, and Docker writes its normal progress there.
+- **Fix:** the script runs Docker through `cmd /c ... >NUL 2>&1` and checks `$LASTEXITCODE`.

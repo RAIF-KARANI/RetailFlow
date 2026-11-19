@@ -49,7 +49,10 @@ model itself) is far slower than an RTX 4060 should be. `nvidia-smi` showed the 
 at 1170 MHz of a 3105 MHz maximum while plugged in, i.e. the laptop's power
 profile was throttling it. See `TROUBLESHOOTING.md`. All speed numbers in later
 docs are measured after switching to a performance power profile.
-TODO: re-run `tools/check_gpu.py` in performance mode and record the result here.
+
+Re-run in performance mode (Phase 8): **16.3 ms/frame** for the same check (same versions, same
+dummy frame). This quick check includes start-up effects; the proper per-backend measurements
+are in `08_STREAMING_PERFORMANCE.md` (e.g. YOLO26m TensorRT FP16: 5 ms inference at 960 px).
 
 **ReID support.** The installed Ultralytics BoT-SORT config has `with_reid`
 (default `False`) and `model: auto`, so ReID can be enabled with a custom tracker

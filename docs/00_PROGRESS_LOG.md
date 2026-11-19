@@ -284,3 +284,26 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 ### Phase 7 status
 - Done and committed. Not built: dashboard site page on the recording clock; cross-camera re-identification
   (no cross-view identity labels to test it).
+
+---
+
+## Phase 8: Final docs and demo
+
+### 8.1 Consistency pass
+- Closed the last two TODOs: `check_gpu.py` in performance mode gives 16.3 ms/frame (was 55.4 while throttled).
+- Re-ran `evaluate.py --configs n640_bytetrack final` and checked every number in the new headline table
+  (doc 10 §0, README) against it.
+
+### 8.2 Demo
+- Annotated, head-blurred demo videos for a shop-front clip, a corridor clip and 30 s of MOT20-02
+  (`outputs/demo/*.mp4`, not committed); one frame of each in `docs/img/`.
+- `demo.ps1`: services + simulated RTSP camera + live pipeline → dashboard, tested end to end.
+- **Learned:** in Windows PowerShell 5.1, `$ErrorActionPreference = "Stop"` makes Docker's normal stderr
+  output fatal. The script checks exit codes instead.
+
+### 8.3 README
+- Rewritten: requirement-by-requirement evidence, headline before/after table, honest list of what is not
+  solved, quick start, architecture, docs index, licences (including YOLO26's AGPL-3.0).
+
+### Phase 8 status
+- Done and committed. Project complete for this brief.

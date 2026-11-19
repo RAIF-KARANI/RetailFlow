@@ -4,6 +4,24 @@ All numbers come from runs on the development machine (RTX 4060 Laptop) and can
 be reproduced with the commands shown. Raw per-sequence rows: `outputs/results.csv`.
 Method and metric definitions: [`09_EVALUATION_METHOD.md`](09_EVALUATION_METHOD.md).
 
+## 0. Headline: before and after
+
+IN/OUT counting error (WAPE = Σ|errors| / Σ true crossings; errors cannot cancel). **Dev** cameras
+were used for every choice; **test** cameras were never used to choose anything. The two exceptions
+(crowd profile, static filter) are labelled where they appear (§2.3, doc 05 §5).
+
+| Camera group | Split | True crossings | Classic method (box centre, simple line, YOLO26n 640) | Baseline (feet + band, YOLO26n 640, ByteTrack) | **Final** (feet + band, YOLO26m TensorRT FP16, BoT-SORT no GMC, crowd profile) |
+|---|---|---|---|---|---|
+| CAVIAR corridor (26 clips) | dev | 95 | 83.2% | 34.7% (33) | **23.2% (22)** |
+| MOT17-02/04/09 | dev | 43 | 44.2% | 23.3% (10) | **18.6% (8)** |
+| CAVIAR shop front (26 clips) | test | 72 | 133.3% | 20.8% (15) | **19.4% (14)** |
+| MOT20 crowds (4 cameras) | test | 1,066 | 81.5% | 85.7% (914) | **30.2% (322)** |
+
+Absolute errors in brackets. Final per MOT20 camera: 01 13 errors / 29, 02 45 / 114 (over-counts),
+03 84 / 385, 05 180 / 538 (extreme, 195 people per frame).
+Speed of the final system: 12.3 ms/frame on dev (Phase 3 system: 28.8). Reproduce:
+`python evaluate.py --configs n640_bytetrack final --variants centre_simple feet_band`.
+
 ---
 
 ## 1. Baseline ("before"), Phase 2
@@ -75,7 +93,7 @@ The busy group has only 2 sequences (MOT17-02, -04); MOT20 is added in Phase 3.
 
 Not reported as a result. The GPU was power-limited and its clock changed during the
 run (corridor clips averaged 29.0 ms/frame, front clips 14.5 ms/frame at the same
-384x288 resolution). Speed is measured properly in Phase 6.
+384x288 resolution). Speed is measured properly in §4 and doc 08.
 
 ---
 
@@ -105,7 +123,7 @@ within 1 error of the best count as tied, and the faster one wins. Selections ar
 | | m960 BoT-SORT + ReID | 23.9% | 33 | 0.720 | 26.3 | tied, slower |
 
 ms/frame here is the mean `avg_proc_ms` over dev sequences (detect + track + count),
-with the GPU in performance mode. Proper speed measurements come in Phase 6.
+with the GPU in performance mode. Proper speed measurements: §4 and doc 08.
 
 Observations:
 - The fresh n640 run reproduced the Phase 2 baseline exactly (43 dev errors).
