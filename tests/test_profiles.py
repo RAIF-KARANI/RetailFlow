@@ -10,8 +10,20 @@ BASE = {"camera_id": "cam", "frame_size": [100, 100],
 
 
 def test_run_names_match_benchmark_format():
-    assert PROFILES["standard"].run_name == "m960_botsort"
-    assert PROFILES["crowd"].run_name == "m1920_botsort"
+    assert PROFILES["standard"].run_name() == "m960_botsort_nogmc"
+    assert PROFILES["crowd"].run_name(suffix="_trt") == "m1920_botsort_nogmc_trt"
+    assert PROFILES["standard"].run_name("botsort") == "m960_botsort"      # Phase 3 runs
+
+
+def test_backend_selects_weights(tmp_path, monkeypatch):
+    import retailflow.profiles as P
+    monkeypatch.setattr(P, "MODELS_DIR", tmp_path)
+    prof = P.PROFILES["standard"]
+    assert prof.weights("auto") == "yolo26m.pt"                  # no engine built yet
+    with pytest.raises(FileNotFoundError):
+        prof.weights("trt")
+    (tmp_path / "yolo26m_960.engine").write_bytes(b"")
+    assert prof.weights("auto").endswith("yolo26m_960.engine") and prof.weights("pt") == "yolo26m.pt"
 
 
 def test_suggest_profile_threshold():

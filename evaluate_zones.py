@@ -33,12 +33,14 @@ OUT = Path("outputs")
 FIGS = Path("docs/img")
 CHOSEN = ZoneConfig()   # 2 s / 2 s, chosen by the dev sweep (docs/05 section 3)
 FILTERS = ("none", "static", "static+staff")
+ZONES_CONFIG = "final_phase3"   # see evaluate.VIRTUAL
 
 
 def runs():
     """(run_dir, sequence, scene) for every sequence with a finished final-profile run."""
     seqs = {s.name: s for s in discover_sequences()}
-    for run_dir in profile_run_dirs(seqs):
+    # Phase 4 numbers (docs/05) were measured on the Phase 3 runs (PyTorch, BoT-SORT with GMC).
+    for run_dir in profile_run_dirs(seqs, ZONES_CONFIG):
         if (run_dir / "summary.json").exists():
             yield run_dir, seqs[run_dir.name], load_scene(scene_path_for_sequence(run_dir.name))
 

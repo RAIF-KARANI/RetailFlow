@@ -89,3 +89,41 @@ Format: **problem → cause → fix**. Newest at the bottom.
 ### Dashboard panels overflowed the screen on phones
 - **Cause:** grid items default to `min-width: auto`, so wide charts and tables forced columns wider than the screen.
 - **Fix:** `.grid > * { min-width: 0 }` and `minmax(min(420px, 100%), 1fr)` columns.
+
+## Phase 6
+
+### Ultralytics installed packages by itself and downgraded ONNX Runtime
+- **Symptom:** ONNX Runtime ran at 215–1,092 ms per frame (CPU speed). `pip list` showed
+  `onnxruntime-gpu 1.22.0` although 1.32.0 had been installed, plus new packages
+  (`nvidia-modelopt`, `polygraphy`, `onnx_graphsurgeon`, `onnxscript`...).
+- **Cause:** during the TensorRT export, Ultralytics' requirement check pip-installed what its FP16
+  path needs and pinned `onnxruntime-gpu` to 1.22, a **CUDA 12** build. This machine has CUDA 13
+  (from torch), so the CUDA provider failed to load and ONNX Runtime **silently fell back to the CPU**.
+- **Fix:** reinstalled `onnxruntime-gpu==1.32.0` (CUDA 13); `tools/export_models.py` sets
+  `YOLO_AUTOINSTALL=false`; all export packages are pinned in `requirements-export.txt`.
+- **Check:** `InferenceSession(...).get_providers()` must list `CUDAExecutionProvider` first.
+  ORT 1.32 needs the CUDA 13 / cuDNN 9 DLLs, which are found once `torch` has been imported.
+- **Lesson:** a "speed" result can be a silent CPU fallback. Always check which device actually ran.
+
+### TensorRT 1920 export: `Failed to allocate memory` in ModelOpt AutoCast
+- **Cause:** Ultralytics converts the ONNX to FP16 by running a CPU reference inference at full
+  size. At 1920x1920 this ran out of memory.
+- **Fix:** the FP16 ONNX written during the 960 export has dynamic axes, so the 1920 engine is built
+  straight from it with the TensorRT API (`tools/export_models.py --from-fp16-onnx`), copying
+  Ultralytics' metadata header from the 960 engine. TensorRT's "Skipping tactic ... insufficient memory"
+  warnings during a build are normal on an 8 GB GPU (it skips candidate kernels that don't fit).
+
+### Multi-stream: "reader is too slow, discarding N frames" even for one fast stream
+- **Symptom:** MediaMTX logged discards for a single MOT17-09 stream processed at 20 ms per
+  33 ms frame; `error while decoding MB` messages from OpenCV's H.264 decoder.
+- **Cause:** each worker opened the RTSP stream and only then ran its first inference, which builds
+  the TensorRT context (several seconds). Nobody read the stream meanwhile, MediaMTX's per-reader
+  queue overflowed and it dropped data (the decoder then sees broken frames).
+- **Fix:** workers warm the model up on a blank frame **before** opening the stream.
+- **Also learned:** dropped frames make the lag check look *better* (the frame counter falls behind the
+  real video), so `run_multi.py` now reads MediaMTX's drop warnings for its run and a stream only
+  counts as real time if nothing was dropped. MediaMTX's "frames" in that message are RTP packets.
+
+### Tools in `tools/` could not `import retailflow`
+- **Cause:** a script's own folder (`tools/`) is first on `sys.path`, not the repo root.
+- **Fix:** each tool inserts the repo root into `sys.path`, as the earlier tools already did.

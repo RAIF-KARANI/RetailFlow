@@ -47,12 +47,19 @@ TIE_ERRORS = 1                 # configs within this many dev counting errors ar
 
 
 def parse_config(name: str) -> dict:
-    """'n1280_botsort_reid' -> {'model': 'yolo26n.pt', 'imgsz': 1280, 'tracker': 'botsort_reid', 'conf': 0.1}."""
-    m = re.fullmatch(r"([nsmlx])(\d+)_(\w+)", ALIASES.get(name, name))
+    """'n1280_botsort_reid' -> {'model': 'yolo26n.pt', 'imgsz': 1280, 'tracker': 'botsort_reid', 'conf': 0.1}.
+
+    An optional backend suffix uses an exported model (tools/export_models.py):
+    'm960_botsort_trt' -> models/yolo26m_960.engine, 'm960_botsort_onnx' -> models/yolo26m_960.onnx.
+    """
+    m = re.fullmatch(r"([nsmlx])(\d+)_(bytetrack|botsort_reid|botsort_nogmc|botsort)(?:_(trt|onnx))?", ALIASES.get(name, name))
     if not m:
-        raise ValueError(f"bad config name {name!r}; expected e.g. n640_bytetrack")
-    size, imgsz, tracker = m.groups()
-    return {"model": f"yolo26{size}.pt", "imgsz": int(imgsz), "tracker": tracker, "conf": 0.1}
+        raise ValueError(f"bad config name {name!r}; expected e.g. n640_bytetrack or m960_botsort_trt")
+    size, imgsz, tracker, backend = m.groups()
+    model = f"yolo26{size}.pt"
+    if backend:
+        model = f"models/yolo26{size}_{imgsz}.{'engine' if backend == 'trt' else 'onnx'}"
+    return {"model": model, "imgsz": int(imgsz), "tracker": tracker, "conf": 0.1}
 
 
 def run_config(name: str, datasets: set[str] | None = None, only: set[str] | None = None,

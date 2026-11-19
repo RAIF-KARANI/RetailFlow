@@ -14,6 +14,14 @@ def test_parse_config_names_and_alias():
         parse_config("bytetrack")
 
 
+def test_parse_config_exported_backends():
+    assert parse_config("m960_botsort_trt")["model"] == "models/yolo26m_960.engine"
+    assert parse_config("m1920_botsort_onnx")["model"] == "models/yolo26m_1920.onnx"
+    assert parse_config("m960_botsort_reid")["tracker"] == "botsort_reid"   # not mistaken for a backend
+    c = parse_config("m1920_botsort_nogmc_trt")
+    assert (c["tracker"], c["model"]) == ("botsort_nogmc", "models/yolo26m_1920.engine")
+
+
 def test_pick_best_prefers_fewest_errors():
     scores = [{"config": "a", "dev_abs_err": 30, "ms_per_frame": 10},
               {"config": "b", "dev_abs_err": 20, "ms_per_frame": 40}]

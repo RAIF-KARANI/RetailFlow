@@ -161,5 +161,6 @@ python evaluate.py --group density
 python benchmark.py --plan onefactor --datasets caviar mot17       # Phase 3 grid (dev)
 python benchmark.py --configs n640_bytetrack m960_botsort m1920_botsort --datasets mot17 mot20
 python evaluate.py --configs m960_botsort --sweep                  # counting settings (dev)
-python evaluate.py --configs n640_bytetrack final --group camera   # before / after
+python evaluate.py --configs n640_bytetrack final_phase3 --group camera   # before / after (Phase 3)
+python evaluate.py --configs final_phase3 final_trt_gmc final             # Phase 6: TensorRT, no GMC
 ```

@@ -3,8 +3,8 @@
 People counting, zones, dwell time and heatmaps from **angled / side-view CCTV**,
 evaluated against public ground truth.
 
-> **Status:** Phases 1–5 (data, pipeline, reliable counting, zones/dwell/heatmaps/staff/blur,
-> backend + dashboard) complete. Results so far:
+> **Status:** Phases 1–6 (data, pipeline, reliable counting, zones/dwell/heatmaps/staff/blur,
+> backend + dashboard, streaming + TensorRT) complete. Results so far:
 > [`docs/10_RESULTS.md`](docs/10_RESULTS.md). Full README with results, architecture and
 > quick start comes in Phase 8. See [`docs/00_PROGRESS_LOG.md`](docs/00_PROGRESS_LOG.md).
 

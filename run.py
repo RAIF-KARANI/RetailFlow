@@ -33,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", default=None, help="output folder (default outputs/run_<camera>)")
     p.add_argument("--profile", choices=sorted(PROFILES), default=None,
                    help="detector profile (default: the scene file's 'profile')")
+    p.add_argument("--backend", choices=["auto", "pt", "trt"], default="auto",
+                   help="auto = TensorRT engine if built (tools/export_models.py), else PyTorch")
     p.add_argument("--model", default=None, help="override the profile: yolo26n/s/m .pt, .onnx or .engine")
     p.add_argument("--tracker", default=None, help="override: bytetrack | botsort | botsort_reid | path.yaml")
     p.add_argument("--imgsz", type=int, default=None, help="override the profile's input size")
@@ -61,7 +63,7 @@ def main() -> None:
     device = int(args.device) if args.device.isdigit() else args.device
     profile_name = args.profile or scene.profile
     prof = get_profile(profile_name)
-    model = args.model or prof.model
+    model = args.model or prof.weights(args.backend)
     tracker_name = args.tracker or prof.tracker
     imgsz = args.imgsz or prof.imgsz
     conf = prof.conf if args.conf is None else args.conf

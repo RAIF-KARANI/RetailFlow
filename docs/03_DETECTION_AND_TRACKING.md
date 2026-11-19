@@ -104,6 +104,10 @@ Tracker × model × image-size comparison: `10_RESULTS.md` §2.1. In short:
   (0.716 → 0.720) but did not improve counts, so it is off by default.
 - **Crowds:** in MOT20 the detector itself was the bottleneck, so dense cameras use a
   `crowd` profile at the full 1920 px (`retailflow/profiles.py`, `10_RESULTS.md` §2.3).
+- **Phase 6:** BoT-SORT's camera-motion compensation (GMC) was switched off
+  (`trackers/botsort_nogmc.yaml`): all cameras are static, it cost up to 31 ms per 1080p frame,
+  and dev errors went 32 → 30. The detector runs as a TensorRT FP16 engine when one is built
+  (`08_STREAMING_PERFORMANCE.md`). Keep GMC on for moving (PTZ) cameras.
 
 Final tracking quality (per-camera profile, mean IDF1): caviar_cor 0.741,
 caviar_front 0.466, MOT17-02 0.398, MOT17-04 0.616, MOT17-09 0.552, MOT20 0.34–0.62.

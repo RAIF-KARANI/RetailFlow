@@ -149,13 +149,15 @@ about 85 ms/frame instead of about 32 ms/frame on these 1080p scenes.
 
 **The "final" system** = `standard` profile (m960 BoT-SORT) on CAVIAR and MOT17-09,
 plus the `crowd` profile (m1920 BoT-SORT) on MOT17-02/04 and all MOT20 cameras.
-`python evaluate.py --configs n640_bytetrack final` compares it with the baseline.
+`python evaluate.py --configs n640_bytetrack final_phase3` compares it with the baseline.
+(In Phase 6 the virtual config `final` was moved to the TensorRT, no-GMC system. The Phase 3
+system is still available as `final_phase3`. See §4.)
 
 ### 2.4 Before / after (feet point + band)
 
 ```powershell
 python benchmark.py --configs n640_bytetrack m960_botsort m1920_botsort --datasets caviar mot17 mot20
-python evaluate.py --configs n640_bytetrack m960_botsort m1920_botsort final --variants centre_simple feet_band
+python evaluate.py --configs n640_bytetrack m960_botsort m1920_botsort final_phase3 --variants centre_simple feet_band
 ```
 
 | Camera | Split | Crossings | Classic baseline (centre, n640) | Baseline feet+band (n640) | m960 everywhere | **Final** |
@@ -227,7 +229,18 @@ Full method and per-zone tables: [`05_ZONES_DWELL_HEATMAP.md`](05_ZONES_DWELL_HE
 
 ## 4. Streaming and performance (Phase 6)
 
-TODO: run and fill in.
+Full details: [`08_STREAMING_PERFORMANCE.md`](08_STREAMING_PERFORMANCE.md).
+
+| System | Dev errors | Test errors | Dev ms/frame | MOT20 ms/frame |
+|---|---|---|---|---|
+| Phase 3 final (PyTorch FP32, BoT-SORT with GMC) | 32 | 342 | 28.8 | 100.0 |
+| TensorRT FP16, BoT-SORT with GMC | 32 | 335 | 16.0 | 46.3 |
+| **Final (TensorRT FP16, BoT-SORT without GMC)** | **30** | **336** | **12.3** | **37.8** |
+
+Real-time capacity on the RTX 4060 Laptop (live RTSP via MediaMTX, 60 s runs): **4 small retail
+cameras** (384×288 @ 25 fps), **2 full-HD cameras** (1080p @ 30 fps), or **1 crowd camera**
+(1920 px input). Beyond that the streams fall behind; at four 1080p streams the CPU (decoding)
+is the limit, not the GPU.
 
 ## 5. Multi-camera (Phase 7)
 

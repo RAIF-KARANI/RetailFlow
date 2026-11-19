@@ -1,0 +1,22 @@
+# BoT-SORT without camera-motion compensation (GMC). IDENTICAL to Ultralytics
+# 8.4.215's default botsort.yaml except `gmc_method: none`.
+#
+# GMC estimates how the whole image moved between frames (sparse optical flow)
+# so a MOVING camera does not confuse the motion model. Every camera here is
+# static (measured in Phase 1), and GMC cost 14-31 ms per 1080p frame on the CPU
+# (docs/08_STREAMING_PERFORMANCE.md). Do not use this file for PTZ / moving cameras.
+
+tracker_type: botsort
+track_high_thresh: 0.25   # first-stage match threshold
+track_low_thresh: 0.1     # second-stage (low-score) match threshold
+new_track_thresh: 0.25    # min score to start a new track
+track_buffer: 30          # frames a lost track is kept
+match_thresh: 0.8         # association cost threshold
+fuse_score: True          # fuse detection score into the matching cost
+
+gmc_method: none          # <-- the only change from the default (was sparseOptFlow)
+
+proximity_thresh: 0.5     # min IoU before appearance is considered
+appearance_thresh: 0.8    # min appearance similarity to accept a ReID match
+with_reid: False          # default: no appearance features
+model: auto

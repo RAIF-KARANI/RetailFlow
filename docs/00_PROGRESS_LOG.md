@@ -137,7 +137,7 @@ honest before/after on unseen test cameras including busy scenes.
 
 ### 3.5 Code and tests
 - `retailflow/profiles.py`; `run.py` reads the scene's profile (still overridable);
-  `evaluate.py --configs final` scores each camera with its own profile.
+  `evaluate.py --configs final` scores each camera with its own profile (renamed `final_phase3` in Phase 6).
 - `pytest -q` → 38 passed.
 
 ### Phase 3 status
@@ -216,3 +216,40 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 
 ### Phase 5 status
 - Done and committed. Not in scope: authentication, connection pooling, retention policy (doc 07 §7).
+
+---
+
+## Phase 6: Streaming and performance
+
+**Goal:** real-time live streams, several at once, without losing accuracy.
+
+### 6.1 Export (`tools/export_models.py`)
+- ONNX and TensorRT FP16 engines with dynamic shapes (rectangular input, as with PyTorch).
+- The 1920 engine ran out of memory in Ultralytics' FP16 step, so it was built directly with the TensorRT API
+  from the size-independent FP16 ONNX.
+- **Learned the hard way:** Ultralytics auto-installed packages and downgraded ONNX Runtime to a CUDA 12
+  build, which silently ran on the CPU (200–1,100 ms per frame). Fixed, auto-install disabled, everything
+  pinned in `requirements-export.txt`. Always check which device actually ran.
+
+### 6.2 Speed and accuracy
+- `tools/benchmark_speed.py`: TensorRT FP16 inference 2.6–3.5× faster than PyTorch FP32. ONNX Runtime FP32
+  was slower than PyTorch.
+- All 62 sequences re-run with TensorRT: dev errors 32 → 32, test 342 → 335. Same accuracy.
+- Found the real bottleneck on 1080p: BoT-SORT's camera-motion compensation (CPU optical flow), useless for
+  static cameras. Without it: dev errors 30, dev 12.3 ms/frame (Phase 3: 28.8). Adopted for both profiles;
+  `--backend auto` uses the engine when built.
+
+### 6.3 Live streams
+- MediaMTX (Compose profile `streaming`, pinned 1.21.3) + `tools/simulate_rtsp.py` (FFmpeg loops videos as RTSP cameras).
+- Real-time check: lag trend + MediaMTX drop warnings. Two measurement bugs found and fixed on the way:
+  start-up backlog made lag look like it was shrinking, and server-side frame drops hid a growing lag.
+  Model warm-up now happens before the stream is opened.
+- `run_multi.py` results: 4 small cameras, 2 full-HD, or 1 crowd camera in real time on this laptop.
+  At 4 × 1080p the CPU (decoding) is the limit.
+- Live RTSP → API → dashboard checked in the browser (session marked live, counts updating).
+
+### 6.4 Tests
+- `pytest -q` → 78 passed (new: streaming helpers, lag check, exported-backend config names, profile backends).
+
+### Phase 6 status
+- Done and committed. Not done: GPU video decoding, batched multi-camera inference (doc 08 §6).

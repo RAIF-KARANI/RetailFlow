@@ -1,0 +1,16 @@
+# Optional: model export and fast inference (Phase 6, docs/08_STREAMING_PERFORMANCE.md).
+#   pip install -r requirements-export.txt
+#
+# Set YOLO_AUTOINSTALL=false before exporting: otherwise Ultralytics installs
+# extra packages on its own and pins onnxruntime-gpu to 1.22 (a CUDA 12 build),
+# which silently falls back to the CPU on this CUDA 13 machine.
+onnx==1.23.2
+onnxslim==0.1.99
+onnxruntime-gpu==1.32.0        # CUDA 13 build; uses the CUDA/cuDNN DLLs that ship with torch
+tensorrt-cu13==11.5.0.63
+# Needed by Ultralytics' TensorRT FP16 export (ModelOpt AutoCast). They were
+# auto-installed by Ultralytics during the first export and are pinned here so the
+# environment is reproducible:
+nvidia-modelopt==0.48.0
+polygraphy==0.53.6
+onnx_graphsurgeon==0.6.1

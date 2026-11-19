@@ -10,6 +10,7 @@ Timestamps:
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -49,6 +50,9 @@ class FrameSource:
         else:
             if not self.is_live and not Path(self.source).exists():
                 raise FileNotFoundError(self.source)
+            if self.source.lower().startswith("rtsp://"):
+                # RTSP over TCP: no lost packets (= no smeared frames) on a busy machine.
+                os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
             self._cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
             if not self._cap.isOpened():
                 raise RuntimeError(f"cannot open {self.source}")

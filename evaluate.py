@@ -5,6 +5,7 @@ Examples:
   python evaluate.py --configs baseline --variants centre_simple feet_simple
   python evaluate.py --group dataset density          # choose summary grouping
   python evaluate.py --configs n640_bytetrack final   # baseline vs final (per-scene profile)
+  python evaluate.py --configs final_phase3 final_trt_gmc final   # Phase 6 steps
 """
 
 from __future__ import annotations
@@ -20,12 +21,20 @@ from retailflow.groundtruth import discover_sequences
 from retailflow.profiles import get_profile
 
 RUNS_DIR = Path("outputs/runs")
-FINAL = "final"  # virtual config: each camera uses the run of its scene's profile
+# Virtual configs: each camera uses the run of ITS scene's profile (standard 960 /
+# crowd 1920). Value = (tracker override, run-name suffix).
+FINAL = "final"
+VIRTUAL = {
+    FINAL: (None, "_trt"),                   # deployed system: TensorRT FP16, BoT-SORT without GMC
+    "final_phase3": ("botsort", ""),         # Phase 3 result: PyTorch, BoT-SORT with GMC
+    "final_trt_gmc": ("botsort", "_trt"),    # Phase 6 step: TensorRT, still with GMC
+}
 
 
-def profile_run_dirs(seqs: dict) -> list[Path]:
+def profile_run_dirs(seqs: dict, config: str = FINAL) -> list[Path]:
     """For every sequence, the run folder of the profile its scene file selects."""
-    return [RUNS_DIR / get_profile(load_scene(scene_path_for_sequence(name)).profile).run_name / name
+    tracker, suffix = VIRTUAL[config]
+    return [RUNS_DIR / get_profile(load_scene(scene_path_for_sequence(name)).profile).run_name(tracker, suffix) / name
             for name in sorted(seqs)]
 
 
@@ -55,13 +64,14 @@ def main() -> None:
         args.out = f"outputs/counting_sweep_{'_'.join(configs)}.csv"
     rows = []
     for cfg in configs:
-        run_dirs = profile_run_dirs(seqs) if cfg == FINAL else sorted((RUNS_DIR / cfg).iterdir())
+        run_dirs = (profile_run_dirs(seqs, cfg) if cfg in VIRTUAL
+                    else sorted((RUNS_DIR / cfg).iterdir()))
         for run_dir in run_dirs:
             if (run_dir / "summary.json").exists() and run_dir.name in seqs:
                 new = evaluate_run(run_dir, seqs[run_dir.name], variants)
-                if cfg == FINAL:
+                if cfg in VIRTUAL:
                     for r in new:
-                        r["config"] = FINAL
+                        r["config"] = cfg
                 rows.extend(new)
     if not rows:
         raise SystemExit("no finished runs found")

@@ -57,6 +57,33 @@ def heatmap_cell_px(width: int) -> int:
     return max(2, round(width / 192))
 
 
+def live_lag_stats(lags: list[float], fps: float, expected_frames: int | None = None) -> dict:
+    """Did a live stream keep up with real time?
+
+    lag(frame) = wall time since the stream opened - frame index / fps.
+    At start-up lag jumps (model warm-up while frames queue) and then usually
+    FALLS while that backlog is drained faster than real time. So the decision
+    uses the TREND of lag over the second half of the run (least-squares slope,
+    seconds of lag per second of video):
+        slope ~ 0  -> keeping up;   slope > 0 -> falling behind
+        realtime_factor = 1 / (1 + slope)   (video seconds processed per wall second)
+    A stream that delivered far fewer frames than expected (the server dropped a
+    too-slow reader, or the connection broke) does not keep up either.
+    """
+    a = np.asarray(lags, float)
+    half = a[len(a) // 2:]
+    t = np.arange(len(a))[len(a) // 2:] / fps
+    slope = float(np.polyfit(t, half, 1)[0]) if len(half) >= 2 * fps else float("nan")
+    ended_early = expected_frames is not None and len(a) < 0.95 * expected_frames
+    per_s = a[:: max(1, round(fps))]
+    return {"frames": len(a), "expected_frames": expected_frames, "ended_early": ended_early,
+            "lag_max_s": round(float(a.max()), 3), "lag_end_s": round(float(a[-1]), 3),
+            "lag_slope": round(slope, 4) if slope == slope else None,
+            "realtime_factor": round(1 / (1 + slope), 3) if slope == slope else None,
+            "keeps_up": (not ended_early) and slope == slope and slope < 0.02,
+            "lag_per_s": [round(float(v), 3) for v in per_s]}
+
+
 class _TrackBuffer:
     """What the pipeline remembers about a live track until it ends.
 
@@ -127,6 +154,7 @@ class Pipeline:
         bg_every = max(1, round(BACKGROUND_EVERY_S * fps))
         # Recent frame timestamps, so back-dated zone events get the right time on
         # live streams too (where timestamps are wall-clock, not frame / fps).
+        lags: list[float] = []
         recent_ts: dict[int, float] = {}
         keep = max(1, round(10 * fps))
 
@@ -144,6 +172,10 @@ class Pipeline:
         for frame in source:
             t0 = time.perf_counter()
             fi, ts = frame.index, round(frame.timestamp, 3)
+            if source.is_live:
+                # Lag = wall time since the stream opened - position of this frame in the
+                # stream. Flat = keeping up with real time; growing = falling behind.
+                lags.append(frame.timestamp - fi / fps)
             recent_ts[fi] = ts
             recent_ts.pop(fi - keep, None)
             people = self.tracker.update(frame.image)
@@ -250,6 +282,8 @@ class Pipeline:
             # Throughput including decoding and drawing (what a user would see).
             "throughput_fps": round(n / wall_s, 2) if wall_s > 0 else None,
         }
+        if lags:
+            summary["live"] = live_lag_stats(lags, fps, source.max_frames)
         (self.out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
         for sink in self.sinks:
             if hasattr(sink, "finish"):

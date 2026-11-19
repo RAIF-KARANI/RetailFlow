@@ -45,5 +45,16 @@ services:
     depends_on:
       - api
 
+  # RTSP server for the simulated CCTV cameras (Phase 6). Only started with
+  #   docker compose --profile streaming up -d mediamtx
+  # tools/simulate_rtsp.py then publishes looped videos to rtsp://127.0.0.1:8554/<cam>.
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.3
+    profiles: ["streaming"]
+    environment:
+      MTX_RTSPTRANSPORTS: tcp          # TCP only: no UDP packet loss on a busy laptop
+    ports:
+      - "127.0.0.1:8554:8554"
+
 volumes:
   pgdata:

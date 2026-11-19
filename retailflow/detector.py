@@ -26,6 +26,7 @@ TRACKERS = {
     "bytetrack": "bytetrack.yaml",
     "botsort": "botsort.yaml",
     "botsort_reid": str(TRACKER_DIR / "botsort_reid.yaml"),  # Phase 3
+    "botsort_nogmc": str(TRACKER_DIR / "botsort_nogmc.yaml"),  # Phase 6: static cameras, no GMC
 }
 
 
