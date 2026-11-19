@@ -76,8 +76,8 @@ cue to re-link the right person.
 **Installed version check (Phase 1):** Ultralytics 8.4.215 ships
 `botsort.yaml` with `with_reid: False` and `model: auto`. With `auto`, the
 appearance features are taken from the YOLO detector's own internal features
-(no second network). We create `trackers/botsort_reid.yaml` with
-`with_reid: True` in Phase 3.
+(no second network). `trackers/botsort_reid.yaml` is the same file with
+`with_reid: True`. We checked that the encoder is really active when it is set.
 
 **Privacy:** ReID embeddings live only in the tracker's memory during a run and
 are never written to disk.
@@ -96,7 +96,17 @@ and Kalman state never leak between videos.
 
 ## Results
 
-Tracker × model × image-size comparison: Phase 3, in `10_RESULTS.md`.
+Tracker × model × image-size comparison: `10_RESULTS.md` §2.1. In short:
+- **Image size:** 640 → 960 gave the biggest gain on dev (43 → 36 errors). 1280 was
+  not better (37). That includes the 384 px CAVIAR clips, where 960 means upsampling.
+- **Model:** YOLO26m beat n and s (34 errors), at about 22 ms/frame against about 12.
+- **Tracker:** BoT-SORT beat ByteTrack (32 vs 34). Adding ReID raised IDF1 slightly
+  (0.716 → 0.720) but did not improve counts, so it is off by default.
+- **Crowds:** in MOT20 the detector itself was the bottleneck, so dense cameras use a
+  `crowd` profile at the full 1920 px (`retailflow/profiles.py`, `10_RESULTS.md` §2.3).
+
+Final tracking quality (per-camera profile, mean IDF1): caviar_cor 0.741,
+caviar_front 0.466, MOT17-02 0.398, MOT17-04 0.616, MOT17-09 0.552, MOT20 0.34–0.62.
 
 Baseline tracking quality (YOLO26n, ByteTrack, `imgsz=640`; mean over sequences):
 
@@ -108,5 +118,5 @@ Baseline tracking quality (YOLO26n, ByteTrack, `imgsz=640`; mean over sequences)
 | MOT17-04 | 0.351 | |
 | MOT17-09 | 0.519 | recall 0.664, 47 ID switches |
 
-Low recall on the 1080p MOT17 scenes is the motivation for testing
-`imgsz` 960/1280 and larger models in Phase 3.
+Low recall on the 1080p MOT17 scenes was the motivation for testing
+larger `imgsz` values and models (above).

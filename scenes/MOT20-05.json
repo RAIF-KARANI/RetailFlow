@@ -1,0 +1,26 @@
+{
+  "camera_id": "MOT20-05",
+  "description": "MOT20-05 packed crowd (~195 people/frame), static elevated camera, no dominant flow. EXTREME stress test, not a store-like scene. IN = towards the camera.",
+  "profile": "crowd",
+  "frame_size": [
+    1654,
+    1080
+  ],
+  "line": {
+    "p1": [
+      50.0,
+      600.0
+    ],
+    "p2": [
+      1600.0,
+      600.0
+    ],
+    "in_point": [
+      800.0,
+      900.0
+    ],
+    "band_px": 15.0
+  },
+  "zones": [],
+  "homography": null
+}

@@ -98,3 +98,48 @@ and one loader that reads all ground truth in the same format.
 
 ### Phase 2 status
 - Done and committed. Next: Phase 3 grid (tracker × model × imgsz), MOT20, min-age tuning.
+
+---
+
+## Phase 3: Reliable counting and the grid
+
+**Goal:** the best detector/tracker/counting settings, chosen on dev only, and an
+honest before/after on unseen test cameras including busy scenes.
+
+### 3.1 MOT20
+- Measured the size first (4.8 GB zip), then `python tools/download_mot.py MOT20 --seqs ...`.
+- All 4 training sequences are static (`check_camera_motion.py`: 0.09–0.55 px/frame).
+  Lines were drawn from traffic plots: 1,066 true crossings, 46–195 people per frame.
+- **Dev/test split by camera:** dev = CAVIAR corridor + MOT17; test = CAVIAR front + MOT20.
+
+### 3.2 Counting sweep on baseline tracks
+- `python evaluate.py --configs baseline --sweep`: 32 combinations. Wide bands hurt the
+  shop-entrance camera badly (3× band: test 65.3%). Min age barely matters.
+
+### 3.3 Automated grid (`benchmark.py --plan onefactor`)
+- Image size → model → tracker, one factor at a time, scored on dev counting errors,
+  with a tie rule of 1 error → the faster config wins. 7 configs × 55 sequences.
+- Chosen: **YOLO26m, 960, BoT-SORT**. Dev errors 43 → 32. ReID did not improve counts.
+- The fresh n640 run reproduced the Phase 2 baseline exactly (43 dev errors).
+- Sweep on the final tracks: the default counting settings tie for best, so no extra filters.
+
+### 3.4 MOT20 and the crowd profile
+- m960 on MOT20: 74.2% WAPE. MOT20-03/05 almost entirely missed.
+- **Diagnosis:** the detector finds about 34 of 195 people on MOT20-05 at 960 px, about 128 at 1920.
+  NMS is not the cause (YOLO26 is NMS-free; `iou` and `max_det` changed nothing).
+- After asking: added a per-camera **crowd profile** (`retailflow/profiles.py`, scene
+  `"profile"` field), used at ≥ 15 people per frame. Checked on the dev crowd cameras first
+  (no change in counts, better recall).
+- Result: MOT20 914 (baseline) → 327 errors. MOT20-02 got worse (8 → 47, over-counting),
+  reported and not tuned away.
+- **Learned:** in crowds, counting accuracy is capped by detection recall. Measure
+  detections before tuning the tracker or the line.
+
+### 3.5 Code and tests
+- `retailflow/profiles.py`; `run.py` reads the scene's profile (still overridable);
+  `evaluate.py --configs final` scores each camera with its own profile.
+- `pytest -q` → 38 passed.
+
+### Phase 3 status
+- Done and committed. Open: MOT20-02 over-counting and MOT20-05 recall (known limitations);
+  crowd-profile speed (83–112 ms/frame) is a Phase 6 topic.

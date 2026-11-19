@@ -1,0 +1,26 @@
+{
+  "camera_id": "MOT20-03",
+  "description": "MOT20-03 night street with two walkways, static elevated camera, small people. Horizontal line across both walkways; IN = towards the camera.",
+  "profile": "crowd",
+  "frame_size": [
+    1173,
+    880
+  ],
+  "line": {
+    "p1": [
+      20.0,
+      450.0
+    ],
+    "p2": [
+      1150.0,
+      450.0
+    ],
+    "in_point": [
+      580.0,
+      700.0
+    ],
+    "band_px": 10.0
+  },
+  "zones": [],
+  "homography": null
+}

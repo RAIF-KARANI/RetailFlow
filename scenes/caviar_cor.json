@@ -1,6 +1,7 @@
 {
   "camera_id": "caviar_cor",
   "description": "CAVIAR Portugal shopping centre, corridor camera (angled down the corridor). Line across the corridor floor; IN = walking towards the camera.",
+  "profile": "standard",
   "frame_size": [
     384,
     288

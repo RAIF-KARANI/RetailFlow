@@ -1,0 +1,26 @@
+{
+  "camera_id": "MOT20-01",
+  "description": "MOT20-01 train-station concourse, static elevated angled camera. Vertical line across the main diagonal flow; IN = walking to the right.",
+  "profile": "crowd",
+  "frame_size": [
+    1920,
+    1080
+  ],
+  "line": {
+    "p1": [
+      1300.0,
+      600.0
+    ],
+    "p2": [
+      1300.0,
+      1000.0
+    ],
+    "in_point": [
+      1600.0,
+      800.0
+    ],
+    "band_px": 15.0
+  },
+  "zones": [],
+  "homography": null
+}

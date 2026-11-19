@@ -83,10 +83,27 @@ def test_band_counts_once_after_real_crossing_with_jitter():
     assert feed(c, 1, JITTER + [110, 130]) == [IN]
 
 
+def test_band_scale_widens_band():
+    # y=108 is 8 px from the line: outside the 5 px band, inside a 2x (10 px) band.
+    assert feed(LineCounter(LINE, BAND), 1, [80, 108]) == [IN]
+    assert feed(LineCounter(LINE, CountingConfig(band_scale=2.0)), 1, [80, 108]) == []
+
+
 def test_point_inside_band_does_not_start_side():
     c = LineCounter(LINE, BAND)
     # starts inside the band, then clearly IN: no previous clear side => no count
     assert feed(c, 1, [100, 103, 120]) == []
+
+
+def test_worked_example_from_docs_04():
+    """The exact table in docs/04_COUNTING_RELIABILITY.md section 2."""
+    line = LineConfig(p1=(45, 190), p2=(265, 190), in_point=(150, 250), band_px=5)
+    ys = [180, 189, 191, 188, 192, 197]
+    simple = LineCounter(line, SIMPLE)
+    assert feed(simple, 1, ys, x=150) == [IN, OUT, IN] and simple.counts == {IN: 2, OUT: 1}
+    band = LineCounter(line, BAND)
+    assert feed(band, 1, ys, x=150) == [IN] and band.counts == {IN: 1, OUT: 0}
+    assert band.distance((150, 197)) == pytest.approx(7.0)
 
 
 # ------------------------------------------------------------ filters

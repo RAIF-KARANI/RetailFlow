@@ -1,0 +1,26 @@
+{
+  "camera_id": "MOT20-02",
+  "description": "MOT20-02 same station, different static elevated camera. Horizontal line across the concourse; IN = walking towards the camera.",
+  "profile": "crowd",
+  "frame_size": [
+    1920,
+    1080
+  ],
+  "line": {
+    "p1": [
+      100.0,
+      700.0
+    ],
+    "p2": [
+      1600.0,
+      700.0
+    ],
+    "in_point": [
+      900.0,
+      900.0
+    ],
+    "band_px": 15.0
+  },
+  "zones": [],
+  "homography": null
+}

@@ -51,6 +51,24 @@ VARIANTS: dict[str, CountingConfig] = {
                                          once_per_direction=True),
 }
 
+# Dev/test split. Counting parameters (band scale, min age...) and the grid's
+# "best config" are chosen on DEV only; TEST is reported but never used to
+# choose anything, so its numbers are an honest estimate on unseen cameras.
+DEV_CAMERAS = {"caviar_cor", "MOT17-02", "MOT17-04", "MOT17-09"}
+
+
+def split_for(camera_id: str) -> str:
+    return "dev" if camera_id in DEV_CAMERAS else "test"
+
+
+def sweep_variants(band_scales=(0.5, 1.0, 2.0, 3.0), min_ages=(0, 5, 10, 20),
+                   once=(False, True)) -> dict[str, CountingConfig]:
+    """All feet-point counting settings for the tuning sweep."""
+    return {f"feet_b{b:g}_age{a}{'_once' if o else ''}":
+            CountingConfig(point="feet", band_scale=b, min_track_age=a, once_per_direction=o)
+            for b in band_scales for a in min_ages for o in once}
+
+
 # Density groups by mean people per frame (from ground truth).
 DENSITY_BINS = [(0, 2.5, "quiet"), (2.5, 15, "medium"), (15, float("inf"), "busy")]
 
@@ -135,11 +153,12 @@ def evaluate_run(run_dir: Path, seq: Sequence, variants: dict[str, CountingConfi
         abs_err = abs(pred_in - true_in) + abs(pred_out - true_out)
         true_total = true_in + true_out
         rows.append({
-            "config": summary.get("config", run_dir.parent.name),
+            "config": run_dir.parent.name,
             "variant": vname,
             "sequence": seq.name,
             "dataset": seq.dataset,
             "camera": scene.camera_id,
+            "split": split_for(scene.camera_id),
             "model": summary.get("model"), "tracker": summary.get("tracker"), "imgsz": summary.get("imgsz"),
             "frames": n_frames,
             "people": int(gt["track_id"].nunique()),

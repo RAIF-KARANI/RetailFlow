@@ -5,6 +5,7 @@ A scene describes everything that depends on WHERE the camera is mounted:
 {
   "camera_id": "caviar_cor",
   "description": "CAVIAR corridor view, line across the corridor",
+  "profile": "standard",                 # or "crowd" (retailflow/profiles.py)
   "frame_size": [384, 288],
   "line": {
     "p1": [45, 190], "p2": [265, 190],   # counting line ON THE FLOOR (pixels)
@@ -24,6 +25,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from retailflow.profiles import PROFILES
 
 Point = tuple[float, float]
 
@@ -62,6 +65,7 @@ class Scene:
     zones: tuple[Zone, ...] = ()
     homography: Homography | None = None
     description: str = ""
+    profile: str = "standard"  # detector profile, see retailflow/profiles.py
     extra: dict = field(default_factory=dict)  # free-form settings (staff rules etc.)
 
 
@@ -85,6 +89,9 @@ def scene_from_dict(d: dict) -> Scene:
         homo = Homography(tuple(_pt(p) for p in h["image_points"]), tuple(_pt(p) for p in h["floor_points"]))
         if len(homo.image_points) < 4 or len(homo.image_points) != len(homo.floor_points):
             raise ValueError("homography needs >= 4 matching image/floor points")
+    profile = d.get("profile", "standard")
+    if profile not in PROFILES:
+        raise ValueError(f"{d['camera_id']}: unknown profile '{profile}'")
     return Scene(
         camera_id=d["camera_id"],
         frame_size=tuple(d["frame_size"]),
@@ -92,6 +99,7 @@ def scene_from_dict(d: dict) -> Scene:
         zones=zones,
         homography=homo,
         description=d.get("description", ""),
+        profile=profile,
         extra=d.get("extra", {}),
     )
 
@@ -101,6 +109,7 @@ def scene_to_dict(s: Scene) -> dict:
     d = {
         "camera_id": s.camera_id,
         "description": s.description,
+        "profile": s.profile,
         "frame_size": list(s.frame_size),
         "line": {"p1": list(s.line.p1), "p2": list(s.line.p2),
                  "in_point": list(s.line.in_point), "band_px": s.line.band_px},

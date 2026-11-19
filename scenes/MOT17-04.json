@@ -1,6 +1,7 @@
 {
   "camera_id": "MOT17-04",
   "description": "MOT17-04 pedestrian street, static high oblique camera. Horizontal line across the street; IN = walking towards the camera.",
+  "profile": "crowd",
   "frame_size": [
     1920,
     1080

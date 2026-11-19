@@ -12,7 +12,27 @@ scenes"** with numbers that anyone can reproduce from public data.
 | `MOT17-02` | 1 | vertical line across the square; IN = rightwards | 18 (15 / 3) |
 | `MOT17-04` | 1 | horizontal line across the street; IN = towards camera | 13 (8 / 5) |
 | `MOT17-09` | 1 | vertical line on the shop-front pavement; IN = rightwards | 12 (10 / 2) |
-| **Total** | **55** | | **210 (113 in / 97 out)** |
+| **Subtotal (retail-density cameras)** | **55** | | **210 (113 in / 97 out)** |
+| `MOT20-01` | 1 | station concourse; vertical line across the main flow; IN = rightwards | 29 (21 / 8) |
+| `MOT20-02` | 1 | same station, other camera; horizontal line; IN = towards camera | 114 (86 / 28) |
+| `MOT20-03` | 1 | night street, two walkways; horizontal line; IN = towards camera | 385 (9 / 376) |
+| `MOT20-05` | 1 | packed crowd, no dominant flow (extreme, not store-like); IN = towards camera | 538 (24 / 514) |
+| **MOT20 subtotal** | **4** | | **1,066 (140 / 926)** |
+
+MOT20 lines were also placed from traffic plots before any system output was seen.
+MOT20 is always **reported separately and per camera**. Otherwise its 1,066 crossings
+would outweigh the other 210 and hide how the system does at normal retail density.
+
+### Dev / test split
+
+| Split | Cameras | Crossings | Used for |
+|---|---|---|---|
+| **dev** | `caviar_cor`, MOT17-02/04/09 | 138 | every choice: image size, model, tracker, band, min age |
+| **test** | `caviar_front`, MOT20-01/02/03/05 | 72 + 1,066 | reporting only |
+
+The split is by **camera**, so no test camera's view or lines influenced a choice.
+One documented exception: the crowd profile was added after a diagnosis on MOT20
+(see `10_RESULTS.md` §2.3 for how that was kept honest).
 
 10 sequences have zero true crossings (e.g. `WalkByShop1front`: people walk
 past the shop but nobody enters). They still matter: every crossing the system
@@ -76,7 +96,9 @@ Computed with `motmetrics`, matching boxes at IoU ≥ 0.5:
 - **MOTA**: 1 − (misses + false positives + ID switches) / GT boxes.
 - **ID switches**, precision, recall.
 
-HOTA needs TrackEval, which is not installed. TODO: decide in Phase 3 whether to add it.
+**HOTA is not reported.** It needs TrackEval, which is not in the agreed tech stack.
+IDF1 already measures identity consistency, which is what matters most for counting.
+TrackEval can be added later if a HOTA number is needed.
 
 ### Speed
 - `avg_proc_ms`: detect + track + count per frame (no decoding/drawing).
@@ -91,7 +113,9 @@ By mean ground-truth people per frame:
 |---|---|---|
 | quiet | < 2.5 | most CAVIAR front, some corridor |
 | medium | 2.5 – 15 | busier CAVIAR corridor, MOT17-09 |
-| busy | ≥ 15 | MOT17-02, MOT17-04, and MOT20 (Phase 3) |
+| busy | ≥ 15 | MOT17-02, MOT17-04, and all MOT20 (MOT20 reported separately) |
+
+The same ≥ 15 threshold selects which cameras use the `crowd` detector profile.
 
 ## 6. Known limitations of this evaluation
 
@@ -134,4 +158,8 @@ detection at all at `imgsz=640`.
 python benchmark.py --configs baseline      # detection + tracking -> outputs/runs/
 python evaluate.py --group camera           # -> outputs/results.csv + summary tables
 python evaluate.py --group density
+python benchmark.py --plan onefactor --datasets caviar mot17       # Phase 3 grid (dev)
+python benchmark.py --configs n640_bytetrack m960_botsort m1920_botsort --datasets mot17 mot20
+python evaluate.py --configs m960_botsort --sweep                  # counting settings (dev)
+python evaluate.py --configs n640_bytetrack final --group camera   # before / after
 ```

@@ -1,6 +1,7 @@
 {
   "camera_id": "caviar_front",
   "description": "CAVIAR Portugal shopping centre, front camera (side view of shop fronts). Line on the Promod shop threshold; IN = entering the shop.",
+  "profile": "standard",
   "frame_size": [
     384,
     288

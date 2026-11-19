@@ -3,7 +3,8 @@
 People counting, zones, dwell time and heatmaps from **angled / side-view CCTV**,
 evaluated against public ground truth.
 
-> **Status:** Phase 1 (setup and data) complete. Full README with results, architecture and
+> **Status:** Phases 1–3 (data, pipeline, reliable counting) complete. Results so far:
+> [`docs/10_RESULTS.md`](docs/10_RESULTS.md). Full README with results, architecture and
 > quick start comes in Phase 8. See [`docs/00_PROGRESS_LOG.md`](docs/00_PROGRESS_LOG.md).
 
 ## Setup (short)

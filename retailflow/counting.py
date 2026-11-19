@@ -46,6 +46,7 @@ class CountingConfig:
 
     point: str = "feet"            # "feet" (bottom-centre) or "centre" of the box
     use_band: bool = True          # False => band forced to 0 (simple line)
+    band_scale: float = 1.0        # multiplies the scene's band_px (for tuning experiments)
     min_track_age: int = 0         # frames a track must exist before counting
     once_per_direction: bool = False
 
@@ -98,7 +99,7 @@ class LineCounter:
         self.a, self.b = line.p1, line.p2
         # Orient so in_point is on the positive side.
         self.sign = 1.0 if signed_distance(line.in_point, self.a, self.b) > 0 else -1.0
-        self.band = line.band_px if cfg.use_band else 0.0
+        self.band = line.band_px * cfg.band_scale if cfg.use_band else 0.0
         self.cfg = cfg
         self.tracks: dict[int, _TrackState] = {}
         self.counts = {IN: 0, OUT: 0}

@@ -1,6 +1,7 @@
 {
   "camera_id": "MOT17-09",
   "description": "MOT17-09 shop fronts (Vodafone, Woolworths), static side-view camera. Vertical line on the pavement; IN = walking to the right.",
+  "profile": "standard",
   "frame_size": [
     1920,
     1080

@@ -66,10 +66,21 @@ Why 02, 04 and 09: we measured camera motion on all 7 training sequences
 ## 3. MOT20 (Phase 3)
 
 ```powershell
-python tools/download_mot.py MOT20 --seqs <chosen sequences> --delete-zip
+python tools/download_mot.py MOT20 --seqs MOT20-01 MOT20-02 MOT20-03 MOT20-05
 ```
 
-TODO: run in Phase 3, then record chosen sequences and camera-motion check here.
+All four training sequences were extracted (the zip has to be downloaded whole anyway).
+Camera motion (`tools/check_camera_motion.py`) and density:
+
+| Sequence | Size | Frames | Median shift (px/frame) | Mean / max people per frame | Use |
+|---|---|---|---|---|---|
+| MOT20-01 | 1920x1080 | 429 | 0.55 (static) | 46 / 55 | busy test |
+| MOT20-02 | 1920x1080 | 2782 | 0.14 (static) | 56 / 97 | busy test |
+| MOT20-03 | 1173x880 | 2405 | 0.09 (static) | 130 / 199 | busy test (small people, night) |
+| MOT20-05 | 1654x1080 | 3315 | 0.11 (static) | 195 / 220 | **extreme** stress test (packed, no dominant flow) |
+
+MOT20-01 moves slightly more (0.55 px) because with ~50 people per frame little
+background is left to match; it is still well under the 1 px static threshold.
 
 ## 4. MMPTRACK (Phase 7, optional)
 
