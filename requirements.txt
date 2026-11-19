@@ -1,0 +1,15 @@
+# RetailFlow CV pipeline dependencies (runs on the host for GPU access).
+#
+# PyTorch is installed FIRST and separately, from the CUDA wheel index,
+# because the default PyPI wheel on Windows is CPU-only:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+# Then:
+#   pip install -r requirements.txt
+
+ultralytics>=8.4      # YOLO26 detector + ByteTrack / BoT-SORT trackers
+lap>=0.5              # linear assignment solver used by Ultralytics trackers
+opencv-python>=4.10   # video I/O, drawing, homography
+numpy>=1.26
+pandas>=2.2
+motmetrics>=1.4       # IDF1 / MOTA tracking metrics
+pytest>=8.0

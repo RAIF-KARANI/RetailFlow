@@ -1,18 +1,30 @@
-# Build and Release Folders
-bin-debug/
-bin-release/
-[Oo]bj/
-[Bb]in/
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
 
-# Other files and folders
-.settings/
+# --- Data and generated outputs (large, licence-restricted, reproducible) ---
+data/
+outputs/
+runs/
 
-# Executables
-*.swf
-*.air
-*.ipa
-*.apk
+# --- Model weights and exports (downloaded / generated on demand) ---
+*.pt
+*.onnx
+*.engine
 
-# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
-# should NOT be excluded as they contain compiler settings and other important
-# information for Eclipse / Flash Builder.
+# --- Node / Next.js dashboard ---
+node_modules/
+.next/
+dashboard/out/
+
+# --- Environment and editor ---
+.env
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store
