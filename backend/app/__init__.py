@@ -1,0 +1,1 @@
+"""RetailFlow backend (FastAPI + PostgreSQL)."""

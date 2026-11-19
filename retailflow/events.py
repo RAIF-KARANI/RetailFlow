@@ -4,8 +4,13 @@ Privacy by design: an event holds only a camera ID, a time, a track ID (an
 integer that is meaningless outside one session), positions and zone names.
 No images, no face crops, no appearance features.
 
-Phase 2 writes events to CSV. Phase 5 adds a sender that POSTs the same
+Events go to one or more sinks: CsvEventWriter (always) and, with
+`run.py --api URL`, ApiEventSender (retailflow/sender.py), which POSTs the same
 records to the FastAPI backend.
+
+Zone events describe the VISIT: zone_enter's frame/timestamp is when the visit
+really started and zone_exit's is when it really ended (value = dwell seconds),
+even though both are detected a little later because of the debounce.
 """
 
 from __future__ import annotations
@@ -20,13 +25,13 @@ class Event:
     camera_id: str
     frame: int
     timestamp: float          # seconds on the video timeline (or since stream start)
-    type: str                 # line_cross | zone_enter | zone_exit | occupancy | staff_flag | static_flag
+    type: str                 # line_cross | zone_enter | zone_exit | staff_flag | static_flag
     track_id: int | None = None
     direction: str | None = None   # "in" / "out" for line_cross
     zone: str | None = None
     x: float | None = None    # anchor point (pixels) at the moment of the event
     y: float | None = None
-    value: float | None = None     # e.g. occupancy count or dwell seconds
+    value: float | None = None     # dwell seconds for zone_exit
     staff: bool = False       # track already marked staff when the event was emitted
 
 # A "staff_flag" event marks a track as staff from then on. Its EARLIER events
@@ -51,3 +56,18 @@ class CsvEventWriter:
 
     def close(self) -> None:
         self._f.close()
+
+
+class MultiSink:
+    """Write every event to several sinks (e.g. CSV file + API sender)."""
+
+    def __init__(self, sinks):
+        self.sinks = list(sinks)
+
+    def write(self, event: Event) -> None:
+        for s in self.sinks:
+            s.write(event)
+
+    def close(self) -> None:
+        for s in self.sinks:
+            s.close()

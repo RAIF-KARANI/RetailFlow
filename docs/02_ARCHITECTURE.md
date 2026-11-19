@@ -10,12 +10,12 @@
                   (frame, ts,    BoT-SORT          zones.py        (anonymous) │    annotated.mp4 (draw.py,
                    image)        (profile)         heatmap.py                  │     privacy.py head blur)
                                                    staff.py, static_filter.py  │
-                                 → TrackedPerson                               └──► HTTP POST (Phase 5)
+                                 → TrackedPerson                               └──► sender.py: HTTP POST
                       │          (id, box, conf)                                         │
                       │  config.py: scenes/<camera>.json (line, IN side, band, zones, homography)
                       └──────────────────────────────────────────────────────────────┼───┘
                                                                                      ▼
-                      ┌──────────── DOCKER COMPOSE (Phase 5) ─────────────────────────┐
+                      ┌──────────── DOCKER COMPOSE (doc 07) ──────────────────────────┐
                       │  FastAPI backend  ──►  PostgreSQL  ◄──  Next.js dashboard     │
                       └───────────────────────────────────────────────────────────────┘
 
@@ -40,7 +40,10 @@
 | `retailflow/static_filter.py` | Never-moving tracks (mannequins) → `static_flag` (per-camera switch) |
 | `retailflow/privacy.py` | `--blur-heads`: pixelate the head region of each person in output images |
 | `retailflow/analytics_eval.py` | Zones / heatmap / staff evaluation against ground truth (`evaluate_zones.py`) |
-| `retailflow/events.py` | Anonymous `Event` schema and CSV writer |
+| `retailflow/events.py` | Anonymous `Event` schema, CSV writer, `MultiSink` |
+| `retailflow/sender.py` | Posts events, summary and heatmap to the API (stdlib only, batching, retry) |
+| `backend/app/` | FastAPI app (`main.py`), SQL schema, pure analytics (`analytics.py`) |
+| `dashboard/` | Next.js dashboard (overview, per-camera page) |
 | `retailflow/draw.py` | Overlays for the annotated video (line, band, IN arrow, boxes, feet, HUD) |
 | `retailflow/pipeline.py` | The per-frame loop tying everything together; writes all outputs |
 | `retailflow/groundtruth.py` | CAVIAR + MOT ground truth → one common table |
@@ -59,16 +62,18 @@ Every analytic output is an `Event` (see `retailflow/events.py`):
 | `camera_id` | str | `caviar_front` | which camera |
 | `frame` | int | 812 | frame index in the source |
 | `timestamp` | float | 32.48 | seconds on the **video timeline** (files) or since stream start (live) |
-| `type` | str | `line_cross` | `line_cross`, `zone_enter`, `zone_exit`, `occupancy`, `staff_flag`, `static_flag` |
+| `type` | str | `line_cross` | `line_cross`, `zone_enter`, `zone_exit`, `staff_flag`, `static_flag` |
 | `track_id` | int | 17 | session-local integer, not linked to any identity |
 | `direction` | str | `in` | for `line_cross` |
-| `zone` | str | `shop_inside` | for zone and occupancy events |
+| `zone` | str | `shop_inside` | for zone events |
 | `x`, `y` | float | 270.5, 140.0 | anchor point in pixels at the event |
-| `value` | float | 4 | occupancy count (`occupancy`) / dwell seconds (`zone_exit`) |
+| `value` | float | 4.2 | dwell seconds (`zone_exit`) |
 | `staff` | bool | false | track already flagged staff when the event was emitted |
 
 `staff_flag` and `static_flag` work **retroactively**: consumers drop every event of a
 flagged `track_id`, including events emitted before the flag (see doc 06).
+`zone_enter` / `zone_exit` are stamped with the visit's **real** start / end frame, so
+occupancy over time can be rebuilt from them (doc 07).
 
 No images, crops or appearance features are ever stored (see Privacy below).
 

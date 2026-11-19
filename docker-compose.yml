@@ -1,0 +1,49 @@
+# RetailFlow services. The computer-vision pipeline runs on the HOST (it needs the
+# GPU) and posts events to the API at http://localhost:8000.
+#
+#   docker compose up -d --build
+#   dashboard: http://localhost:3001     API docs: http://localhost:8000/docs
+#
+# Credentials are local-development defaults; override them in a .env file.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-retailflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retailflow}
+      POSTGRES_DB: retailflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:55432:5432"   # host port 5432 is often taken (local Postgres / reserved)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-retailflow} -d retailflow"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-retailflow}:${POSTGRES_PASSWORD:-retailflow}@db:5432/retailflow
+      CORS_ORIGINS: http://localhost:${DASHBOARD_PORT:-3001},http://127.0.0.1:${DASHBOARD_PORT:-3001},http://localhost:3000
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        # The browser calls the API directly; NEXT_PUBLIC_* is baked in at build time.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-3001}:3000"   # 3000 is often taken by other dev servers
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

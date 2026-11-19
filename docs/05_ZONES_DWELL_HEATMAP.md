@@ -55,8 +55,9 @@ looking at any system output.
 Without debouncing, the same walk would be 2 visits. Missed detections are bridged in
 the same way, so a short occlusion does not split a visit.
 
-In the pipeline this runs online and emits `zone_enter`, `zone_exit` (with the dwell in
-`value`) and `occupancy` (once per second) events. Offline, `zone_analysis()` runs **the
+In the pipeline this runs online and emits `zone_enter` (stamped with the visit's real,
+back-dated start) and `zone_exit` (stamped with its real end; dwell in `value`). The
+backend rebuilds occupancy over time from these visits (doc 07). Offline, `zone_analysis()` runs **the
 same class** on saved tracks and on ground truth, so true and predicted dwell use identical rules.
 
 ## 3. Choosing the debounce times (dev only)

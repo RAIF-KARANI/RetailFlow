@@ -4,8 +4,9 @@ Per frame:
   1. detector + tracker  -> people (track ID + box)
   2. staff filter         -> flags tracks that stay in staff zones (staff_flag event)
   3. line counter         -> line_cross events (IN / OUT)
-  4. zone tracker         -> zone_enter / zone_exit events (exit carries dwell seconds)
-                             and occupancy events once per second
+  4. zone tracker         -> zone_enter (at the visit's real start) and zone_exit
+                             (at its real end, value = dwell seconds). Occupancy over
+                             time is rebuilt from these visits by the backend.
   5. heatmap              -> person-seconds per cell, customers only. Each track's
                              cells are buffered until it ends (unseen 2 s); then it
                              is dropped if staff or static (mannequin, static_flag)
@@ -15,7 +16,7 @@ Outputs written to `out_dir`:
   tracks.csv    every tracked box in every frame (frame, track_id, x1..y2, conf).
                 Saving raw tracks lets evaluate.py re-count offline with
                 different settings WITHOUT re-running the detector.
-  events.csv    line crossings, zone visits, occupancy samples, staff flags
+  events.csv    line crossings, zone visits, staff / static flags
   heatmap.npy   raw person-seconds grid;  heatmap.png  rendered over a people-free background
   summary.json  configuration, counts, zone summary and timing for this run
   annotated.mp4 optional, with --save-video (heads blurred with --blur-heads)
@@ -38,7 +39,7 @@ from retailflow import draw
 from retailflow.config import Scene
 from retailflow.counting import IN, OUT, CountingConfig, LineCounter
 from retailflow.detector import PersonTracker
-from retailflow.events import CsvEventWriter, Event
+from retailflow.events import CsvEventWriter, Event, MultiSink
 from retailflow.heatmap import Heatmap, median_background
 from retailflow.privacy import blur_heads
 from retailflow.sources import FrameSource
@@ -83,7 +84,7 @@ class Pipeline:
 
     def __init__(self, scene: Scene, tracker: PersonTracker, counting: CountingConfig,
                  out_dir: str | Path, save_video: bool = False, run_info: dict | None = None,
-                 blur: bool = False, zone_cfg: ZoneConfig = ZoneConfig()):
+                 blur: bool = False, zone_cfg: ZoneConfig = ZoneConfig(), sinks=()):
         self.scene = scene
         self.tracker = tracker
         self.counting = counting
@@ -93,9 +94,10 @@ class Pipeline:
         self.run_info = run_info or {}
         self.blur = blur
         self.zone_cfg = zone_cfg
+        self.sinks = list(sinks)      # extra event sinks, e.g. ApiEventSender
 
     def _close_track(self, tid: int, buf: _TrackBuffer, heat: Heatmap, staff: StaffFilter,
-                     events: CsvEventWriter, frame: int, ts: float) -> None:
+                     events: MultiSink, frame: int, ts: float) -> None:
         """Track ended: flag it as a static object, or add it to the heatmap if it is a customer."""
         if self.scene.static_filter and is_static(np.array(buf.feet), np.array(buf.heights), heat.fps):
             self.static_ids.add(tid)
@@ -106,7 +108,7 @@ class Pipeline:
     def run(self, source: FrameSource, show: bool = False) -> dict:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         cam, fps = self.scene.camera_id, source.fps
-        events = CsvEventWriter(self.out_dir / "events.csv")
+        events = MultiSink([CsvEventWriter(self.out_dir / "events.csv"), *self.sinks])
         tracks_f = open(self.out_dir / "tracks.csv", "w", newline="")
         tracks_w = csv.writer(tracks_f)
         tracks_w.writerow(["frame", "track_id", "x1", "y1", "x2", "y2", "conf"])
@@ -123,7 +125,13 @@ class Pipeline:
         visits_n = 0
         bg_frames: list[np.ndarray] = []
         bg_every = max(1, round(BACKGROUND_EVERY_S * fps))
-        occ_every = max(1, round(fps))                 # occupancy sample once per second
+        # Recent frame timestamps, so back-dated zone events get the right time on
+        # live streams too (where timestamps are wall-clock, not frame / fps).
+        recent_ts: dict[int, float] = {}
+        keep = max(1, round(10 * fps))
+
+        def frame_time(f: int) -> float:
+            return recent_ts.get(f, round(f / fps, 3))
         buffers: dict[int, _TrackBuffer] = {}          # live tracks, for end-of-track decisions
         track_end_gap = max(1, round(TRACK_END_S * fps))
         self.static_ids: set[int] = set()
@@ -136,6 +144,8 @@ class Pipeline:
         for frame in source:
             t0 = time.perf_counter()
             fi, ts = frame.index, round(frame.timestamp, 3)
+            recent_ts[fi] = ts
+            recent_ts.pop(fi - keep, None)
             people = self.tracker.update(frame.image)
             feet = {p.track_id: p.feet for p in people}
 
@@ -153,17 +163,17 @@ class Pipeline:
                     events.write(Event(cam, fi, ts, "line_cross", p.track_id, direction,
                                        x=anchor[0], y=anchor[1], staff=staff.is_staff(p.track_id)))
 
-            for kind, tid, zname, visit in zones.update(fi, feet):
+            # Zone events carry the TRUE visit start / end frame (they are detected a bit
+            # later, after the debounce), so a database can rebuild occupancy over time.
+            for kind, tid, zname, info in zones.update(fi, feet):
                 is_staff = staff.is_staff(tid)
                 if kind == "enter":
-                    events.write(Event(cam, fi, ts, "zone_enter", tid, zone=zname, staff=is_staff))
+                    events.write(Event(cam, info, frame_time(info), "zone_enter", tid,
+                                       zone=zname, staff=is_staff))
                 else:
                     visits_n += 1
-                    events.write(Event(cam, fi, ts, "zone_exit", tid, zone=zname,
-                                       value=visit.dwell_s, staff=is_staff))
-            if self.scene.zones and fi % occ_every == 0:
-                for zname, count in zones.occupancy().items():
-                    events.write(Event(cam, fi, ts, "occupancy", zone=zname, value=count))
+                    events.write(Event(cam, info.end_frame, frame_time(info.end_frame), "zone_exit", tid,
+                                       zone=zname, value=info.dwell_s, staff=is_staff))
 
             # Heatmap: whether a track is staff or a static object (mannequin) is only
             # known when it ends, so each track's heatmap cells wait in a buffer.
@@ -197,7 +207,7 @@ class Pipeline:
 
         for _, tid, zname, visit in zones.finish():
             visits_n += 1
-            events.write(Event(cam, max(n - 1, 0), round((n - 1) / fps, 3) if fps else 0.0, "zone_exit",
+            events.write(Event(cam, visit.end_frame, frame_time(visit.end_frame), "zone_exit",
                                tid, zone=zname, value=visit.dwell_s, staff=staff.is_staff(tid)))
         last_ts = round((n - 1) / fps, 3) if fps else 0.0
         for tid in list(buffers):
@@ -211,8 +221,9 @@ class Pipeline:
             cv2.destroyAllWindows()
 
         np.save(self.out_dir / "heatmap.npy", heat.grid)
-        if bg_frames:
-            cv2.imwrite(str(self.out_dir / "heatmap.png"), heat.render(median_background(bg_frames)))
+        background = median_background(bg_frames) if bg_frames else None
+        if background is not None:
+            cv2.imwrite(str(self.out_dir / "heatmap.png"), heat.render(background))
 
         # Customer counts: drop every crossing by a track that was EVER flagged staff.
         customer = {IN: 0, OUT: 0}
@@ -240,4 +251,10 @@ class Pipeline:
             "throughput_fps": round(n / wall_s, 2) if wall_s > 0 else None,
         }
         (self.out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        for sink in self.sinks:
+            if hasattr(sink, "finish"):
+                # The background is only sent when the scene uses the image grid
+                # (a floor-plan grid is not drawn over the camera image).
+                sink.finish(summary, heat.grid, heat.cell, floor=heat.H is not None,
+                            background=background if heat.H is None else None)
         return summary

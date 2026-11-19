@@ -67,3 +67,25 @@ Format: **problem → cause → fix**. Newest at the bottom.
 - **Symptom:** the hottest predicted heatmap spots were inside the shop, where the ground truth has nobody;
   one "person" was present in every frame of `ShopAssistant1front`.
 - **Fix:** static-object filter, switched on per camera (doc 05 §5).
+
+## Phase 5
+
+### Docker: `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`
+- **Cause:** Docker Desktop was not running.
+- **Fix:** start Docker Desktop and wait until `docker info` answers.
+
+### `ports are not available ... 127.0.0.1:5432` / `Bind for 127.0.0.1:3000 failed: port is already allocated`
+- **Cause:** host ports 5432 and 3000 were already in use by other software on this machine.
+- **Fix:** Postgres is published on host port 55432 and the dashboard on 3001 (`DASHBOARD_PORT`).
+  Other programs were left untouched.
+
+### Every API call from Python took ~2 s
+- **Symptom:** `urllib` to `http://localhost:8000` took 2.1 s per call; `http://127.0.0.1:8000` took 0.014 s.
+- **Cause:** `localhost` resolves to IPv6 `::1` first. Docker publishes the port on IPv4 `127.0.0.1`
+  only, so each request waits for the IPv6 attempt to fail.
+- **Fix:** the sender rewrites `localhost` to `127.0.0.1`; docs and tests use `127.0.0.1`. Browsers
+  fall back quickly, so the dashboard is not affected.
+
+### Dashboard panels overflowed the screen on phones
+- **Cause:** grid items default to `min-width: auto`, so wide charts and tables forced columns wider than the screen.
+- **Fix:** `.grid > * { min-width: 0 }` and `minmax(min(420px, 100%), 1fr)` columns.

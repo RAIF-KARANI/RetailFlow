@@ -184,3 +184,35 @@ truth like counting, plus staff filtering and head blurring.
 ### Phase 4 status
 - Done and committed. Open: shop-front walkway under-detection (glass railing); staff rule depends on
   stable IDs; no floor-plan heatmaps because no dataset has floor measurements.
+
+---
+
+## Phase 5: Backend and dashboard
+
+**Goal:** events from the pipeline into PostgreSQL through FastAPI, and a Next.js dashboard
+showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
+
+### 5.1 Services
+- `docker compose up -d --build`: Postgres 16, FastAPI (`backend/`), Next.js (`dashboard/`).
+  Only the listed stack plus the packages it needs: `uvicorn` (server) and `psycopg` (driver).
+  No ORM, no chart library.
+- Host ports 5432 and 3000 were taken on this machine, so the stack uses 55432 and 3001.
+
+### 5.2 Design decisions
+- **Sessions:** each video keeps its own video-time axis; nothing is put on a fake clock.
+- **Retroactive flags:** a `customer_events` view drops all events of tracks later flagged staff or static.
+- **Occupancy from visits:** zone events now carry the real visit start/end, and the API rebuilds
+  occupancy from them, so staff and mannequins can still be removed afterwards. The pipeline's 1 Hz
+  occupancy samples were dropped for this reason.
+
+### 5.3 Pipeline to API
+- `run.py --api http://127.0.0.1:8000` (`retailflow/sender.py`, stdlib only): batches, retry after 5 s, local CSV always written.
+- **Learned:** `localhost` cost 2 s per request (IPv6 tried first, Docker listens on IPv4 only).
+- Demo data: 4 CAVIAR clips, MOT17-09 and MOT20-02 processed with `--api`.
+
+### 5.4 Checks
+- `pytest -q` → 70 passed, including the API integration test against the running stack.
+- Dashboard checked in the browser: desktop and phone width (fixed a grid overflow), no console errors.
+
+### Phase 5 status
+- Done and committed. Not in scope: authentication, connection pooling, retention policy (doc 07 §7).

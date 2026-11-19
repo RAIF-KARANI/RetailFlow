@@ -94,8 +94,10 @@ class ZoneTracker:
     """Online zone membership for many tracks and zones.
 
     Call `update(frame, {track_id: feet_point})` once per frame with ALL people
-    seen in that frame. Returns ("enter"|"exit", track_id, zone, Visit|None)
-    tuples. Call `finish(last_frame)` at the end to close open visits.
+    seen in that frame. Returns ("enter", track_id, zone, start_frame) and
+    ("exit", track_id, zone, Visit) tuples. Both are reported a little late
+    (after enter_s / exit_s), but carry the true visit start / end frames.
+    Call `finish()` at the end to close open visits.
     """
 
     def __init__(self, zones: tuple[Zone, ...] | list[Zone], fps: float, cfg: ZoneConfig = ZoneConfig()):
@@ -132,7 +134,7 @@ class ZoneTracker:
                     if st.run_in >= self.enter_frames:
                         st.visiting = True
                         st.run_out = 0
-                        out.append(("enter", tid, zone.name, None))
+                        out.append(("enter", tid, zone.name, st.first_in))  # back-dated start
                 st.last_in = frame
             # everyone else known in this zone: outside or missing
             idle = []
