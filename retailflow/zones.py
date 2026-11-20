@@ -115,7 +115,8 @@ class ZoneTracker:
         st.visiting, st.run_in, st.run_out = False, 0, 0
         return v
 
-    def update(self, frame: int, points: dict[int, Point]) -> list[tuple]:
+    def update(self, frame: int, points: dict[int, Point], step: int = 1) -> list[tuple]:
+        """`step`: frames since the previous update (> 1 when a live stream skipped frames)."""
         out = []
         ids = list(points)
         pts = np.array([points[i] for i in ids], dtype=float).reshape(-1, 2)
@@ -130,7 +131,7 @@ class ZoneTracker:
                 else:
                     if st.run_in == 0:
                         st.first_in = frame
-                    st.run_in += 1
+                    st.run_in += step
                     if st.run_in >= self.enter_frames:
                         st.visiting = True
                         st.run_out = 0
@@ -142,7 +143,7 @@ class ZoneTracker:
                 if zname != zone.name or tid in now_in:
                     continue
                 if st.visiting:
-                    st.run_out += 1
+                    st.run_out += step
                     if st.run_out >= self.exit_frames:
                         out.append(("exit", tid, zname, self._close((tid, zname), st)))
                 if not st.visiting:

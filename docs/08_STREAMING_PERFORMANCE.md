@@ -233,6 +233,47 @@ So: **one full-HD camera keeps up on this laptop in normal traffic, only just, a
 that arrive while it is behind are dropped by the RTSP server, so crossings in those minutes can be
 missed (about 71 s of the hour, 2%). MEVA has no in/out ground truth, so the counts cannot be scored.
 
-Ways to fix it (not done): read the stream in its own thread and keep only the newest frame, so a slow
-moment skips whole frames instead of losing packets mid-frame (the likely cause of the 249 H.264 decode
-errors in the log); decode on the GPU (NVDEC); or use a smaller input size or YOLO26s on this camera.
+### 9.1 The fix: keep only the newest frame
+
+Live streams are now read by a background thread (`retailflow/sources.py`, `LatestFrameReader`) that
+decodes **every** frame and hands the pipeline only the newest one. When a frame takes longer than its
+33 ms, the next frames are skipped **whole**, instead of the RTSP server dropping packets mid-frame.
+`Frame.index` stays the frame's true position in the stream, so video time is unchanged, and zone
+debounce, staff time and the heatmap give each analysed frame the weight of the frames skipped before it.
+The real-time check now also reports `received`, `skipped` and `processed_frac`, and only says
+`keeps_up` when at most 1% of frames were skipped (skipping keeps the lag flat, so lag alone would hide it).
+A stream that stops sending frames ends the run after at most 15 s (it used to block for good).
+
+The same hour, live with `--api`, before and after (the "after" run had nothing else on the GPU or in
+the background; see §9.2):
+
+| | Before (packet drops) | **After (latest frame)** |
+|---|---|---|
+| Lag behind the stream, max / at the end | 77.9 s / 70.9 s | **3.1 s / −0.7 s** |
+| H.264 decode errors in the log | 249 | **0** |
+| MediaMTX "reader is too slow" warnings | 262 | **0** |
+| Frames analysed | 108,000 received, about 71 s of them lost in dropped packets | **105,253 of 108,000 (97.5%)**, 2,747 skipped whole |
+| `keeps_up` (≤ 1% skipped, no lag growth) | no | no (2.5% skipped) |
+| Processing time per frame | 22.0 ms | 21.2 ms |
+| In / out | 89 / 122 | 87 / 123 |
+| Zone visits (stairs / lobby right / doormat) | 336 (233 / 68 / 35) | 395 (280 / 84 / 31) |
+| Track IDs | 836 | 733 |
+
+**Result:** one full-HD camera now runs a whole hour live without falling behind; over the hour
+2.5% of the frames are skipped instead of whole seconds being lost. By the 1% rule the laptop still has no
+headroom for this camera at peak. The counts barely move. There are about 18% more zone visits and 12% fewer
+track IDs, which fits frames no longer arriving corrupted (a broken track splits into short pieces that
+never reach the 2 s visit threshold), but MEVA has no ground truth to check which run is closer.
+
+Still open: decode on the GPU (NVDEC), or a smaller input size or YOLO26s on this camera, would create
+headroom for the peak.
+
+### 9.2 What spoiled two of the runs
+
+- **Leftover simulated cameras.** `demo.ps1` stopped the simulator but not its FFmpeg encoder: with a
+  venv, `python.exe` is a launcher that starts the real interpreter, so FFmpeg is a grandchild. Four
+  encoders (two of them full HD) kept running and loaded the CPU during the second hour (6.9% skipped,
+  27.2 ms per frame). Fixed: the script stops the whole process tree (`taskkill /T`).
+- **Another program on the GPU.** A local LLM held 6.3 GB of the 8 GB GPU memory during the third run,
+  which took 64 ms per frame. Docker Desktop's engine then stopped responding and the run ended after
+  15.6 minutes. Measure on a GPU with nothing else loaded (`nvidia-smi` memory use).

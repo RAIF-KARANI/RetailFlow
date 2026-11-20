@@ -44,8 +44,11 @@ class StaffFilter:
         self.frames_in: dict[int, int] = defaultdict(int)
         self.staff: set[int] = set()
 
-    def update(self, points: dict[int, tuple[float, float]]) -> list[int]:
-        """Feed this frame's feet points; returns track IDs newly flagged as staff."""
+    def update(self, points: dict[int, tuple[float, float]], step: int = 1) -> list[int]:
+        """Feed this frame's feet points; returns track IDs newly flagged as staff.
+
+        `step`: frames this update stands for (> 1 when a live stream skipped frames).
+        """
         if not self.polygons or not points:
             return []
         ids = list(points)
@@ -57,7 +60,7 @@ class StaffFilter:
         need = self.rule.min_seconds * self.fps
         for tid, ok in zip(ids, inside):
             if ok and tid not in self.staff:
-                self.frames_in[tid] += 1
+                self.frames_in[tid] += step
                 if self.frames_in[tid] >= need:
                     self.staff.add(tid)
                     new.append(tid)

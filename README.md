@@ -45,8 +45,9 @@ What is **not** solved, in plain words:
   The detector does not see enough people; a crowd-trained detector would be the next step.
 - **MOT20-02 over-counts** with the crowd profile (45 errors on 114 crossings) while the other crowds
   under-count. Reported, not tuned away on test data.
-- **One hour live on real footage** (MEVA, full HD, 30 fps): ran the full hour into the dashboard, but fell
-  71 s behind in the rush minutes (27.3 fps at peak, [doc 08 §9](docs/08_STREAMING_PERFORMANCE.md)).
+- **One hour live on real footage** (MEVA, full HD, 30 fps): runs the whole hour live into the dashboard
+  (lag at most 3.1 s), but skips 2.5% of the frames over the hour: no headroom left on this laptop
+  ([doc 08 §9](docs/08_STREAMING_PERFORMANCE.md)).
 - **Staff filtering** depends on the tracker keeping one ID. No public dataset labels staff, so it is not scored.
 
 ## Quick start (Windows, PowerShell)
@@ -74,7 +75,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (88 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (94 tests; the API integration test runs when the stack is up).
 
 ## How it works
 
@@ -123,7 +124,7 @@ scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             88 tests                                     docs/          everything above
+tests/             94 tests                                     docs/          everything above
 ```
 
 ## Data acknowledgements and licences

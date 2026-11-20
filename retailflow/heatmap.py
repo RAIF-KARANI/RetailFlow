@@ -56,10 +56,10 @@ class Heatmap:
         ok = (cells[:, 0] >= 0) & (cells[:, 0] < self.shape[0]) & (cells[:, 1] >= 0) & (cells[:, 1] < self.shape[1])
         return cells[ok]
 
-    def add(self, points) -> None:
-        """Add one frame's feet points (each person = 1/fps seconds)."""
+    def add(self, points, frames: int = 1) -> None:
+        """Add one frame's feet points (each person = frames/fps seconds)."""
         cells = self.to_cells(np.asarray(points, np.float32).reshape(-1, 2))
-        np.add.at(self.grid, (cells[:, 0], cells[:, 1]), 1.0 / self.fps)
+        np.add.at(self.grid, (cells[:, 0], cells[:, 1]), frames / self.fps)
 
     def add_cells(self, cell_counts: dict[tuple[int, int], int]) -> None:
         """Add pre-binned person-frames {(row, col): frames} (see Pipeline's track buffer)."""

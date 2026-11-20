@@ -57,7 +57,9 @@ def heatmap_cell_px(width: int) -> int:
     return max(2, round(width / 192))
 
 
-def live_lag_stats(lags: list[float], fps: float, expected_frames: int | None = None) -> dict:
+def live_lag_stats(lags: list[float], fps: float, expected_frames: int | None = None,
+                   received: int | None = None, skipped: int = 0,
+                   indices: list[int] | None = None, max_skip_frac: float = 0.01) -> dict:
     """Did a live stream keep up with real time?
 
     lag(frame) = wall time since the stream opened - frame index / fps.
@@ -69,19 +71,32 @@ def live_lag_stats(lags: list[float], fps: float, expected_frames: int | None = 
         realtime_factor = 1 / (1 + slope)   (video seconds processed per wall second)
     A stream that delivered far fewer frames than expected (the server dropped a
     too-slow reader, or the connection broke) does not keep up either.
+
+    Live sources skip frames when processing is behind (sources.LatestFrameReader),
+    which keeps the lag flat. So keeping up ALSO requires that at most
+    `max_skip_frac` of the received frames were skipped; `processed_frac` says
+    how many were analysed.
     """
     a = np.asarray(lags, float)
-    half = a[len(a) // 2:]
-    t = np.arange(len(a))[len(a) // 2:] / fps
-    slope = float(np.polyfit(t, half, 1)[0]) if len(half) >= 2 * fps else float("nan")
-    ended_early = expected_frames is not None and len(a) < 0.95 * expected_frames
-    per_s = a[:: max(1, round(fps))]
-    return {"frames": len(a), "expected_frames": expected_frames, "ended_early": ended_early,
+    idx = np.asarray(indices if indices is not None else range(len(a)), float)
+    received = received if received is not None else len(a)
+    half = slice(len(a) // 2, None)
+    t = idx[half] / fps
+    slope = float(np.polyfit(t, a[half], 1)[0]) if len(a[half]) >= 2 * fps else float("nan")
+    ended_early = expected_frames is not None and received < 0.95 * expected_frames
+    skip_frac = skipped / received if received else 0.0
+    # One lag value per second of video (the first frame processed in each second).
+    secs = (idx // max(1, round(fps))).astype(int)
+    first = np.r_[True, secs[1:] != secs[:-1]]
+    return {"frames": len(a), "received": received, "skipped": skipped,
+            "processed_frac": round(1 - skip_frac, 4),
+            "expected_frames": expected_frames, "ended_early": ended_early,
             "lag_max_s": round(float(a.max()), 3), "lag_end_s": round(float(a[-1]), 3),
             "lag_slope": round(slope, 4) if slope == slope else None,
             "realtime_factor": round(1 / (1 + slope), 3) if slope == slope else None,
-            "keeps_up": (not ended_early) and slope == slope and slope < 0.02,
-            "lag_per_s": [round(float(v), 3) for v in per_s]}
+            "keeps_up": (not ended_early) and slope == slope and slope < 0.02
+                        and skip_frac <= max_skip_frac,
+            "lag_per_s": [round(float(v), 3) for v in a[first]]}
 
 
 class _TrackBuffer:
@@ -98,12 +113,12 @@ class _TrackBuffer:
         self.heights: list[float] = []
         self.last_frame = -1
 
-    def add(self, frame: int, p, heat: Heatmap) -> None:
+    def add(self, frame: int, p, heat: Heatmap, step: int = 1) -> None:
         self.last_frame = frame
         self.feet.append(p.feet)
         self.heights.append(p.y2 - p.y1)
         for r, c in heat.to_cells(np.array([p.feet])):
-            self.cells[(int(r), int(c))] += 1
+            self.cells[(int(r), int(c))] += step
 
 
 class Pipeline:
@@ -157,11 +172,19 @@ class Pipeline:
         # Recent frame timestamps, so back-dated zone events get the right time on
         # live streams too (where timestamps are wall-clock, not frame / fps).
         lags: list[float] = []
+        lag_idx: list[int] = []
         recent_ts: dict[int, float] = {}
         keep = max(1, round(10 * fps))
 
         def frame_time(f: int) -> float:
-            return recent_ts.get(f, round(f / fps, 3))
+            if f in recent_ts:
+                return recent_ts[f]
+            # A frame the live reader skipped: nearest processed frame +- the gap.
+            near = [k for k in recent_ts if abs(k - f) <= keep]
+            if not near:
+                return round(f / fps, 3)
+            k = min(near, key=lambda k: abs(k - f))
+            return round(recent_ts[k] + (f - k) / fps, 3)
         buffers: dict[int, _TrackBuffer] = {}          # live tracks, for end-of-track decisions
         # Live overlay heatmap (--heatmap-overlay): every person counts AT ONCE, because the
         # staff / mannequin decision only exists when a track ends. The saved heatmap and the
@@ -177,19 +200,24 @@ class Pipeline:
         ids_seen: set[int] = set()
         t_start = time.perf_counter()
         n = 0
+        prev_fi = -1
         for frame in source:
             t0 = time.perf_counter()
             fi, ts = frame.index, round(frame.timestamp, 3)
+            # Frames this one stands for: 1, or more when a live stream skipped frames
+            # because processing was behind (sources.LatestFrameReader).
+            step, prev_fi = max(1, fi - prev_fi), fi
             if source.is_live:
                 # Lag = wall time since the stream opened - position of this frame in the
                 # stream. Flat = keeping up with real time; growing = falling behind.
                 lags.append(frame.timestamp - fi / fps)
+                lag_idx.append(fi)
             recent_ts[fi] = ts
             recent_ts.pop(fi - keep, None)
             people = self.tracker.update(frame.image)
             feet = {p.track_id: p.feet for p in people}
 
-            for tid in staff.update(feet):
+            for tid in staff.update(feet, step):
                 events.write(Event(cam, fi, ts, "staff_flag", tid, staff=True))
 
             for p in people:
@@ -205,7 +233,7 @@ class Pipeline:
 
             # Zone events carry the TRUE visit start / end frame (they are detected a bit
             # later, after the debounce), so a database can rebuild occupancy over time.
-            for kind, tid, zname, info in zones.update(fi, feet):
+            for kind, tid, zname, info in zones.update(fi, feet, step):
                 is_staff = staff.is_staff(tid)
                 if kind == "enter":
                     events.write(Event(cam, info, frame_time(info), "zone_enter", tid,
@@ -218,13 +246,13 @@ class Pipeline:
             # Heatmap: whether a track is staff or a static object (mannequin) is only
             # known when it ends, so each track's heatmap cells wait in a buffer.
             for p in people:
-                buffers.setdefault(p.track_id, _TrackBuffer()).add(fi, p, heat)
+                buffers.setdefault(p.track_id, _TrackBuffer()).add(fi, p, heat, step)
             for tid in [t for t, b in buffers.items() if fi - b.last_frame > track_end_gap]:
                 self._close_track(tid, buffers.pop(tid), heat, staff, events, fi, ts)
             proc_ms.append((time.perf_counter() - t0) * 1000)
             n += 1
 
-            if fi % bg_every == 0 and len(bg_frames) < BACKGROUND_SAMPLES:
+            if fi // bg_every != (fi - step) // bg_every and len(bg_frames) < BACKGROUND_SAMPLES:
                 bg_frames.append(frame.image.copy())   # before any drawing
 
             if writer is not None or show:
@@ -234,8 +262,8 @@ class Pipeline:
                 if self.heat_overlay:
                     pts = [pt for tid, pt in feet.items() if not staff.is_staff(tid)]
                     if pts:
-                        live_heat.add(pts)
-                    if overlay is None or fi % overlay_every == 0:
+                        live_heat.add(pts, step)
+                    if overlay is None or fi // overlay_every != (fi - step) // overlay_every:
                         overlay = overlay_colors(live_heat.grid, (img.shape[1], img.shape[0]))
                     blend_overlay(img, *overlay)
                 draw.draw_zones(img, self.scene.zones, zones.occupancy())
@@ -256,9 +284,10 @@ class Pipeline:
             visits_n += 1
             events.write(Event(cam, visit.end_frame, frame_time(visit.end_frame), "zone_exit",
                                tid, zone=zname, value=visit.dwell_s, staff=staff.is_staff(tid)))
-        last_ts = round((n - 1) / fps, 3) if fps else 0.0
+        last_fi = max(prev_fi, 0)
+        last_ts = frame_time(last_fi)
         for tid in list(buffers):
-            self._close_track(tid, buffers.pop(tid), heat, staff, events, max(n - 1, 0), last_ts)
+            self._close_track(tid, buffers.pop(tid), heat, staff, events, last_fi, last_ts)
         wall_s = time.perf_counter() - t_start
         events.close()
         tracks_f.close()
@@ -298,12 +327,18 @@ class Pipeline:
             "throughput_fps": round(n / wall_s, 2) if wall_s > 0 else None,
         }
         if lags:
-            summary["live"] = live_lag_stats(lags, fps, source.max_frames)
+            summary["live"] = live_lag_stats(lags, fps, source.max_frames,
+                                             received=prev_fi + 1, skipped=source.frames_skipped,
+                                             indices=lag_idx)
         (self.out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
         for sink in self.sinks:
             if hasattr(sink, "finish"):
                 # The background is only sent when the scene uses the image grid
                 # (a floor-plan grid is not drawn over the camera image).
-                sink.finish(summary, heat.grid, heat.cell, floor=heat.H is not None,
-                            background=background if heat.H is None else None)
+                try:
+                    sink.finish(summary, heat.grid, heat.cell, floor=heat.H is not None,
+                                background=background if heat.H is None else None)
+                except Exception as e:   # API down: the local outputs are already written
+                    print(f"WARNING: could not send the session summary: {e}")
+                    summary.setdefault("sink_errors", []).append(str(e))
         return summary

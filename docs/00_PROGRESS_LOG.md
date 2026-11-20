@@ -319,5 +319,9 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 - **One hour live with the API:** 108,000 frames, 89 in / 122 out, 336 zone visits, 22.0 ms per frame on
   average. It did **not** keep up through the rush minutes (real-time factor 0.962, 71 s lag at the end):
   details and fixes in doc 08 §9.
+- **Fix:** live streams are read in a thread that keeps only the newest frame; skipped frames are counted
+  and weighted. Same hour again, nothing else running: lag at most 3.1 s, 0 decode errors, 0 server drops,
+  97.5% of frames analysed, 87 in / 123 out (doc 08 §9.1). A stalled stream now ends the run in at most 15 s.
+- **Also fixed:** `demo.ps1` left the simulator's FFmpeg running (grandchild of the venv launcher).
 - **Learned:** a camera that keeps up on average can still fall behind at peak traffic. Check the busiest
-  minutes, not only the average frame time.
+  minutes, not only the average frame time, and measure with nothing else on the machine.

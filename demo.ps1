@@ -40,11 +40,12 @@ try {
     Start-Process "http://localhost:3001"
     Write-Host "4/4 Running the pipeline for $Seconds s (Ctrl+C to stop)..." -ForegroundColor Cyan
     & $py run.py --source "rtsp://127.0.0.1:8554/$Stream" --scene $Scene --out "outputs\demo\$Stream" `
-        --api http://127.0.0.1:8000 --duration $Seconds | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|avg_proc_ms|Outputs'
+        --api http://127.0.0.1:8000 --duration $Seconds | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|processed_frac|"skipped"|avg_proc_ms|Outputs'
 }
 finally {
-    # Stop the simulator and the FFmpeg process it started (only those, not other FFmpeg instances).
-    Get-CimInstance Win32_Process -Filter "ParentProcessId=$($sim.Id)" | ForEach-Object { Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }
-    Stop-Process -Id $sim.Id -ErrorAction SilentlyContinue
+    # Stop the simulator's whole process tree (only it, not other FFmpeg instances). With a venv,
+    # python.exe is a launcher that starts the real interpreter, so FFmpeg is a GRANDCHILD:
+    # stopping only direct children left FFmpeg encoding in the background.
+    cmd /c "taskkill /PID $($sim.Id) /T /F >NUL 2>&1"
     Write-Host "Simulated camera stopped. Services keep running: docker compose --profile streaming down" -ForegroundColor Yellow
 }

@@ -164,8 +164,24 @@ Format: **problem → cause → fix**. Newest at the bottom.
   249 H.264 "error while decoding MB" lines.
 - **Cause:** in the busiest minutes (many people at once) one 1920×1072 frame takes longer than its
   33 ms; measured offline 27.3 fps on a busy stretch. MediaMTX then drops packets for the slow reader.
-- **Status:** documented, not fixed (doc 08 §9 lists the options).
+- **Fix:** live streams are read in a thread that keeps only the newest frame (whole frames are skipped,
+  not packets). Same hour: lag at most 3.1 s, 0 decode errors, 0 drops (doc 08 §9.1).
 
 ### Heatmap overlay was almost invisible
 - **Cause:** colours were scaled to the maximum cell, and one spot where people stood still dominated.
 - **Fix:** scale to the 99th percentile and give every visited cell at least 20% opacity.
+
+### `demo.ps1` left FFmpeg encoders running after it ended
+- **Cause:** a venv's `python.exe` is a launcher that starts the real interpreter, so the simulator's
+  FFmpeg is a grandchild; the script only stopped direct children.
+- **Fix:** `taskkill /PID <simulator> /T /F` stops the whole tree. Checked: 0 FFmpeg left after a run.
+
+### Live run hung for 13 minutes, then crashed sending the summary
+- **Cause:** Docker Desktop's engine stopped responding (every call returned 500), so the stream stalled;
+  OpenCV waited on it with no timeout, and the final POST to the API timed out and raised.
+- **Fix:** live captures open with a 15 s open/read timeout; a failed summary POST is a warning (the local
+  outputs are already written). Docker Desktop had to be restarted.
+
+### A live run took 64 ms per frame instead of 21
+- **Cause:** a local LLM (Ollama) held 6.3 GB of the 8 GB GPU memory at the same time.
+- **Fix:** none needed in RetailFlow; measure with nothing else on the GPU (`nvidia-smi`, `ollama ps`).
