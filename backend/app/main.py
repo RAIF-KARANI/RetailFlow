@@ -102,10 +102,15 @@ def _session(conn, sid: uuid.UUID) -> dict:
 
 
 def _end_s(conn, s: dict) -> float:
-    """Length of the session timeline: frames / fps when finished, else last event time."""
+    """Length of the session timeline: frames / fps when finished, else last event time.
+
+    `video_frames` (stream position) is used when present: on a live stream that skipped
+    frames, `frames` counts only the analysed ones and would make the video look shorter.
+    """
     summ = s["summary"] or {}
-    if summ.get("frames") and s["video_fps"]:
-        return summ["frames"] / s["video_fps"]
+    frames = summ.get("video_frames") or summ.get("frames")
+    if frames and s["video_fps"]:
+        return frames / s["video_fps"]
     r = conn.execute("SELECT max(ts) AS t FROM events WHERE session_id = %s", (s["session_id"],)).fetchone()
     return float(r["t"] or 0.0)
 
@@ -226,7 +231,8 @@ def list_cameras():
                    coalesce(sum(s.video_seconds), 0) AS video_seconds
             FROM cameras c
             LEFT JOIN (SELECT session_id, camera_id,
-                              (summary->>'frames')::float / nullif(video_fps, 0) AS video_seconds
+                              coalesce(summary->>'video_frames', summary->>'frames')::float
+                                / nullif(video_fps, 0) AS video_seconds
                        FROM sessions) s USING (camera_id)
             GROUP BY c.camera_id ORDER BY c.camera_id""").fetchall()
         for c in cams:

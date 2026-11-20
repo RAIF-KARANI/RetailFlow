@@ -62,3 +62,6 @@ select, button { font: inherit; color: var(--text); background: var(--panel);
 .error { color: var(--out); }
 .scroll { overflow-x: auto; }
 svg text { fill: var(--muted); font-size: 11px; }
+.watch { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px;
+         background: var(--accent); color: var(--panel); font-weight: 600; font-size: 14px; }
+.watch:hover { text-decoration: none; filter: brightness(1.1); }

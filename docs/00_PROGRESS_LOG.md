@@ -329,3 +329,7 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   (boxes, line, zones, heatmap) at http://127.0.0.1:8090 as MJPEG, drawn only while someone watches.
   Cost on the busiest 5 minutes: 2.3% → 2.5% skipped frames. **Learned:** the NumPy heatmap blend took
   64 ms per full-HD frame; `cv2.blendLinear` takes 1.4 ms.
+- **Dashboard link and Stop button:** a live session run with `--preview` shows "Watch live video" on the
+  dashboard; the preview page's "Stop run" ends the run cleanly (tested live: session closed,
+  `stopped_by_user: true`, simulator stopped). The session length now comes from the stream position
+  (`video_frames`), not from the number of analysed frames.

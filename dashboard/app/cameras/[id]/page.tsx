@@ -77,6 +77,14 @@ export default function CameraPage() {
             {[5, 10, 30, 60].map((b) => <option key={b} value={b}>{b} s</option>)}
           </select>
           {summary && !summary.finished && <span className="muted">live · refreshing every 5 s</span>}
+          {summary && !summary.finished && typeof summary.run_info.preview_url === "string" && (
+            // The pipeline's own annotated video (run.py --preview), with a Stop button.
+            <a className="watch" href={summary.run_info.preview_url} target="_blank" rel="noopener noreferrer"
+               aria-label="Watch live video"
+               title="Boxes, counting line, zones and heatmap from the running pipeline">
+              &#9654; Watch live video
+            </a>
+          )}
         </div>
       </div>
       {err && <p className="error">{err}</p>}

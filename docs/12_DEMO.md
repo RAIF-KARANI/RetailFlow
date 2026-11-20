@@ -62,6 +62,10 @@ then run `python run.py --source my_video.mp4 --scene scenes/my_cam.json`. `--du
 zones, live heatmap, IN/OUT so far) as an MJPEG stream, about 10 frames per second at 960 px. No second
 model runs. Frames are only drawn while the page is open, and the server listens on this computer only
 (127.0.0.1), because the preview shows people. Add `--blur-heads` to pixelate heads in it.
+On the dashboard, a live session started with the preview shows a **▶ Watch live video** button that opens
+this page. The page's **■ Stop run** button ends the run cleanly: outputs are written, the summary goes to
+the API and the session is closed on the dashboard (Ctrl+C in the terminal also stops it, but leaves the
+session marked live).
 Measured cost, busiest 5 minutes of the MEVA hour streamed live (full HD, 30 fps): 2.3% of frames skipped
 without the page open, 2.5% with it (2,206 preview frames sent); counts identical (7 in / 34 out).
 

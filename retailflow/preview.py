@@ -10,6 +10,10 @@ Cost control:
   - JPEG encoding happens in the server's own thread, not in the pipeline loop.
 The server listens on 127.0.0.1 only: the preview shows people, so it is not
 exposed on the network.
+
+Stop button: POST /stop (with the X-RetailFlow-Stop header, which a page from another
+site cannot send without a CORS preflight this server never answers) asks the pipeline
+to end the run cleanly: outputs and the API summary are written as for a normal end.
 """
 
 from __future__ import annotations
@@ -27,18 +31,34 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <style>
  :root {{ color-scheme: light dark; }}
  body {{ margin:0; font-family:system-ui,sans-serif; background:#111; color:#eee; }}
- header {{ padding:10px 16px; font-size:14px; display:flex; gap:12px; align-items:center; }}
+ header {{ padding:10px 16px; font-size:14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }}
+ button {{ margin-left:auto; font:inherit; padding:6px 14px; border-radius:6px; border:1px solid #a33;
+          background:#3a1414; color:#fdd; cursor:pointer; }}
+ button:disabled {{ opacity:.6; cursor:default; }}
+ #msg {{ color:#fc6; }}
  .dot {{ width:9px; height:9px; border-radius:50%; background:#e33; }}
  main {{ padding:0 16px 16px; }}
  img {{ width:100%; max-width:1280px; height:auto; display:block; background:#000; }}
  small {{ color:#aaa; }}
 </style></head><body>
-<header><span class="dot"></span><b>{cam}</b><small>live pipeline output, {fps} fps preview, video time on the frame</small></header>
+<header><span class="dot" id="dot"></span><b>{cam}</b><small>live pipeline output, {fps} fps preview, video time on the frame</small>
+<span id="msg"></span><button id="stop" title="End this run now; results and the dashboard summary are saved">&#9632; Stop run</button></header>
 <main><img id="v" src="/stream" alt="annotated live camera (waiting for the pipeline)"></main>
 <script>
- // Reconnect when the stream ends or is not up yet (model still loading, run restarted).
- const v = document.getElementById("v");
- v.onerror = () => setTimeout(() => {{ v.src = "/stream?" + Date.now(); }}, 1000);
+ const v = document.getElementById("v"), b = document.getElementById("stop"), m = document.getElementById("msg");
+ let stopped = false;
+ // Reconnect when the stream ends or is not up yet (model still loading), unless stopped.
+ v.onerror = () => {{ if (!stopped) setTimeout(() => {{ v.src = "/stream?" + Date.now(); }}, 1000); }};
+ b.onclick = async () => {{
+   if (!confirm("Stop this run? Counts so far are kept and the session is closed on the dashboard.")) return;
+   b.disabled = true; m.textContent = "Stopping...";
+   try {{
+     const r = await fetch("/stop", {{ method: "POST", headers: {{ "X-RetailFlow-Stop": "1" }} }});
+     if (!r.ok) throw new Error(r.status);
+     stopped = true; m.textContent = "Run stopped. Results are being saved; you can close this page.";
+     document.getElementById("dot").style.background = "#777";
+   }} catch (e) {{ b.disabled = false; m.textContent = "Could not stop (" + e + ")"; }}
+ }};
 </script>
 </body></html>"""
 
@@ -59,6 +79,7 @@ class PreviewServer:
         self._viewers = 0
         self._last_pub = 0.0
         self._closed = False
+        self.stop_requested = False        # set by the page's Stop button (POST /stop)
         server = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -78,6 +99,18 @@ class PreviewServer:
                     server._stream(self)
                 else:
                     self.send_error(404)
+
+            def do_POST(self):
+                if self.path.split("?")[0] != "/stop" or self.headers.get("X-RetailFlow-Stop") != "1":
+                    self.send_error(403 if self.path.startswith("/stop") else 404)
+                    return
+                server.stop_requested = True
+                body = b'{"stopping": true}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
 
         self._httpd = ThreadingHTTPServer((host, port), Handler)
         self._httpd.daemon_threads = True

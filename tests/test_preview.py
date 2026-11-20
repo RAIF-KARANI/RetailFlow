@@ -63,3 +63,21 @@ def test_preview_rate_is_limited():
     finally:
         srv._viewers = 0
         srv.close()
+
+
+def test_stop_needs_post_with_header():
+    import urllib.error
+    srv = PreviewServer("cam_x", port=0)
+    try:
+        def post(headers):
+            req = urllib.request.Request(srv.url + "stop", data=b"", method="POST", headers=headers)
+            try:
+                return urllib.request.urlopen(req, timeout=5).status
+            except urllib.error.HTTPError as e:
+                return e.code
+        assert post({}) == 403 and not srv.stop_requested           # e.g. a form from another site
+        assert post({"X-RetailFlow-Stop": "1"}) == 200 and srv.stop_requested
+        html = urllib.request.urlopen(srv.url, timeout=5).read().decode()
+        assert "Stop run" in html
+    finally:
+        srv.close()

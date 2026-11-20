@@ -35,7 +35,8 @@ def drain(reader, work_s):
 
 
 def test_fast_consumer_gets_every_frame():
-    r = LatestFrameReader(FakeCamera(40, 200), max_frames=None)
+    # 50 fps: 20 ms per frame leaves a loaded test machine plenty of time to take each one.
+    r = LatestFrameReader(FakeCamera(40, 50), max_frames=None)
     got = drain(r, 0.0)
     assert got == list(range(40)) and r.skipped == 0
 

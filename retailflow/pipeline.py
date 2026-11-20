@@ -205,7 +205,11 @@ class Pipeline:
         t_start = time.perf_counter()
         n = 0
         prev_fi = -1
+        stopped_by_user = False
         for frame in source:
+            if self.preview is not None and self.preview.stop_requested:
+                stopped_by_user = True                   # Stop button on the preview page
+                break
             t0 = time.perf_counter()
             fi, ts = frame.index, round(frame.timestamp, 3)
             # Frames this one stands for: 1, or more when a live stream skipped frames
@@ -322,7 +326,8 @@ class Pipeline:
             "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "counting": asdict(self.counting),
             "band_px": band,
-            "frames": n,
+            "frames": n,                       # frames analysed
+            "video_frames": prev_fi + 1,       # stream position reached (includes skipped frames)
             "video_fps": fps,
             "counts": dict(self.counter.counts),
             "counts_customers": customer,
@@ -337,6 +342,7 @@ class Pipeline:
         }
         if self.preview is not None:
             summary["preview_frames"] = self.preview.published
+            summary["stopped_by_user"] = stopped_by_user
         if lags:
             summary["live"] = live_lag_stats(lags, fps, source.max_frames,
                                              received=prev_fi + 1, skipped=source.frames_skipped,

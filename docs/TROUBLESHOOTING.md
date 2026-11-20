@@ -190,3 +190,13 @@ Format: **problem → cause → fix**. Newest at the bottom.
 - **Cause:** the heatmap overlay was blended in NumPy: 64 ms per full-HD frame, done 10 times a second
   while the page was open.
 - **Fix:** `cv2.blendLinear` does the same blend in 1.4 ms (results within 1 grey level).
+
+### Ctrl+C left the session marked "live" on the dashboard
+- **Cause:** Ctrl+C kills the run before it sends its summary to the API.
+- **Fix:** use the preview page's **Stop run** button (`--preview`): the pipeline leaves its loop and
+  finishes normally.
+
+### A stopped live session showed less video time than it had reached
+- **Cause:** the API computed the length as analysed frames / fps; with skipped frames that is too short
+  (46.3 s shown for about 67 s of video).
+- **Fix:** the summary also stores `video_frames` (stream position) and the API uses it.

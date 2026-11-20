@@ -90,6 +90,8 @@ def main() -> None:
     out = Path(args.out or f"outputs/run_{scene.camera_id}")
     run_info = {"profile": profile_name, "model": model, "tracker": tracker_name,
                 "imgsz": imgsz, "conf": conf}
+    if preview is not None:
+        run_info["preview_url"] = preview.url       # the dashboard links to it while live
     source = FrameSource(args.source, fps=args.fps, max_frames=args.max_frames)
     apply_duration(source, args.duration)
     sinks = []
