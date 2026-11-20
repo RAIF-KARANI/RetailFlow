@@ -53,6 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="also send events to the RetailFlow API, e.g. http://localhost:8000")
     p.add_argument("--heatmap-overlay", action="store_true",
                    help="tint the saved video / preview with the heatmap so far (builds up as it plays)")
+    p.add_argument("--preview", nargs="?", const=8090, type=int, default=None, metavar="PORT",
+                   help="watch the running pipeline in a browser at http://127.0.0.1:PORT/ "
+                        "(default 8090): boxes, line, zones, heatmap; no second model")
     p.add_argument("--blur-heads", action="store_true",
                    help="pixelate heads in the saved video / preview (detection still uses the original)")
     p.add_argument("--device", default="0")
@@ -69,6 +72,11 @@ def apply_duration(source: FrameSource, seconds: float | None) -> None:
 def main() -> None:
     args = build_parser().parse_args()
     scene = load_scene(args.scene)
+    preview = None
+    if args.preview is not None:       # start first, so the page is up while the model loads
+        from retailflow.preview import PreviewServer
+        preview = PreviewServer(scene.camera_id, port=args.preview)
+        print(f"Live preview: {preview.url}", flush=True)
     counting = CountingConfig(point=args.point, use_band=not args.no_band,
                               min_track_age=args.min_age, once_per_direction=args.once_per_direction)
     device = int(args.device) if args.device.isdigit() else args.device
@@ -89,9 +97,13 @@ def main() -> None:
         sender = ApiEventSender(args.api, scene, args.source, source.fps, run_info)
         print(f"API session {sender.session_id}")
         sinks.append(sender)
-    summary = Pipeline(scene, tracker, counting, out, args.save_video, run_info,
-                       blur=args.blur_heads, sinks=sinks,
-                       heat_overlay=args.heatmap_overlay).run(source, show=args.show)
+    try:
+        summary = Pipeline(scene, tracker, counting, out, args.save_video, run_info,
+                           blur=args.blur_heads, sinks=sinks, heat_overlay=args.heatmap_overlay,
+                           preview=preview).run(source, show=args.show)
+    finally:
+        if preview is not None:
+            preview.close()
     print(json.dumps(summary, indent=2))
     print(f"Outputs in {out}")
 

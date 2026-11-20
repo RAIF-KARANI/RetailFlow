@@ -268,6 +268,10 @@ never reach the 2 s visit threshold), but MEVA has no ground truth to check whic
 Still open: decode on the GPU (NVDEC), or a smaller input size or YOLO26s on this camera, would create
 headroom for the peak.
 
+**Live preview** (`--preview`, doc 12): the running pipeline also serves its annotated frames to a browser.
+On the busiest 5 minutes streamed live it changed the skipped frames from 2.3% to 2.5% (same counts),
+after the heatmap blend was moved from NumPy (64 ms per full-HD frame) to `cv2.blendLinear` (1.4 ms).
+
 ### 9.2 What spoiled two of the runs
 
 - **Leftover simulated cameras.** `demo.ps1` stopped the simulator but not its FFmpeg encoder: with a

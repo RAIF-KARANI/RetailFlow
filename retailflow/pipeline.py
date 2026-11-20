@@ -127,7 +127,7 @@ class Pipeline:
     def __init__(self, scene: Scene, tracker: PersonTracker, counting: CountingConfig,
                  out_dir: str | Path, save_video: bool = False, run_info: dict | None = None,
                  blur: bool = False, zone_cfg: ZoneConfig = ZoneConfig(), sinks=(),
-                 heat_overlay: bool = False):
+                 heat_overlay: bool = False, preview=None):
         self.scene = scene
         self.tracker = tracker
         self.counting = counting
@@ -139,6 +139,9 @@ class Pipeline:
         self.zone_cfg = zone_cfg
         self.sinks = list(sinks)      # extra event sinks, e.g. ApiEventSender
         self.heat_overlay = heat_overlay
+        # Live browser preview (retailflow.preview.PreviewServer): gets the annotated frame,
+        # with the heatmap overlay, only while someone is watching.
+        self.preview = preview
 
     def _close_track(self, tid: int, buf: _TrackBuffer, heat: Heatmap, staff: StaffFilter,
                      events: MultiSink, frame: int, ts: float) -> None:
@@ -190,8 +193,9 @@ class Pipeline:
         # staff / mannequin decision only exists when a track ends. The saved heatmap and the
         # dashboard keep using the filtered one (`heat`).
         live_heat = Heatmap((source.width, source.height), fps, heatmap_cell_px(source.width))
-        overlay = None
+        overlay, overlay_fi = None, -10**9
         overlay_every = max(1, round(fps / 2))         # recolour twice per second
+        use_overlay = self.heat_overlay or self.preview is not None
         track_end_gap = max(1, round(TRACK_END_S * fps))
         self.static_ids: set[int] = set()
 
@@ -255,16 +259,19 @@ class Pipeline:
             if fi // bg_every != (fi - step) // bg_every and len(bg_frames) < BACKGROUND_SAMPLES:
                 bg_frames.append(frame.image.copy())   # before any drawing
 
-            if writer is not None or show:
+            if use_overlay:                               # build up on EVERY frame
+                pts = [pt for tid, pt in feet.items() if not staff.is_staff(tid)]
+                if pts:
+                    live_heat.add(pts, step)
+            to_preview = self.preview is not None and self.preview.wants_frame()
+            if writer is not None or show or to_preview:
                 img = frame.image
                 if self.blur:
                     blur_heads(img, [(p.x1, p.y1, p.x2, p.y2) for p in people])
-                if self.heat_overlay:
-                    pts = [pt for tid, pt in feet.items() if not staff.is_staff(tid)]
-                    if pts:
-                        live_heat.add(pts, step)
-                    if overlay is None or fi // overlay_every != (fi - step) // overlay_every:
+                if use_overlay:
+                    if overlay is None or fi - overlay_fi >= overlay_every:
                         overlay = overlay_colors(live_heat.grid, (img.shape[1], img.shape[0]))
+                        overlay_fi = fi
                     blend_overlay(img, *overlay)
                 draw.draw_zones(img, self.scene.zones, zones.occupancy())
                 draw.draw_line(img, self.scene.line, band)
@@ -272,9 +279,11 @@ class Pipeline:
                 rate = 1000 / (sum(proc_ms[-30:]) / len(proc_ms[-30:]))
                 draw.draw_hud(img, [f"IN {self.counter.counts[IN]}   OUT {self.counter.counts[OUT]}",
                                     f"people {len(people)}   {rate:.0f} FPS",
-                                    f"t={frame.timestamp:.1f}s (video time)"])
+                                    f"t={fi / fps:.1f}s (video time)"])
                 if writer is not None:
                     writer.write(img)
+                if to_preview:
+                    self.preview.publish(img)
                 if show:
                     cv2.imshow(cam, img)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -326,6 +335,8 @@ class Pipeline:
             # Throughput including decoding and drawing (what a user would see).
             "throughput_fps": round(n / wall_s, 2) if wall_s > 0 else None,
         }
+        if self.preview is not None:
+            summary["preview_frames"] = self.preview.published
         if lags:
             summary["live"] = live_lag_stats(lags, fps, source.max_frames,
                                              received=prev_fi + 1, skipped=source.frames_skipped,

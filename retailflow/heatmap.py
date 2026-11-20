@@ -105,8 +105,11 @@ def overlay_colors(grid: np.ndarray, size: tuple[int, int], sigma_cells: float =
 
 def blend_overlay(image: np.ndarray, col: np.ndarray, alpha: np.ndarray) -> None:
     """Blend an overlay from `overlay_colors` into `image`, in place."""
-    a = alpha[..., None]
-    image[:] = (image * (1 - a) + col * a).astype(np.uint8)
+    # cv2.blendLinear: per-pixel weights in optimised code, about 1.4 ms on a 1920x1072
+    # frame against 64 ms for the same blend in NumPy (it decided whether a live preview
+    # keeps up). Results differ by at most 1 grey level (rounding).
+    a = alpha.astype(np.float32, copy=False)
+    image[:] = cv2.blendLinear(image, col, 1.0 - a, a)
 
 
 def heatmap_from_table(table, frame_size, fps, cell_px=4, homography=None) -> Heatmap:

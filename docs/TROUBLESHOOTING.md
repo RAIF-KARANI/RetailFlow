@@ -185,3 +185,8 @@ Format: **problem → cause → fix**. Newest at the bottom.
 ### A live run took 64 ms per frame instead of 21
 - **Cause:** a local LLM (Ollama) held 6.3 GB of the 8 GB GPU memory at the same time.
 - **Fix:** none needed in RetailFlow; measure with nothing else on the GPU (`nvidia-smi`, `ollama ps`).
+
+### Watching the live preview made the pipeline skip more frames
+- **Cause:** the heatmap overlay was blended in NumPy: 64 ms per full-HD frame, done 10 times a second
+  while the page was open.
+- **Fix:** `cv2.blendLinear` does the same blend in 1.4 ms (results within 1 grey level).

@@ -57,6 +57,14 @@ then run `python run.py --source my_video.mp4 --scene scenes/my_cam.json`. `--du
 4. Opens <http://localhost:3001>. Choose `caviar_front`, then the session marked **live**:
    the KPIs, crossings chart and zone occupancy refresh every 5 s.
 
+**Watch the live video too:** `.\demo.ps1 -Preview` (or `run.py ... --preview`) opens
+<http://127.0.0.1:8090>: the running pipeline's own annotated frames (boxes, feet points, counting line,
+zones, live heatmap, IN/OUT so far) as an MJPEG stream, about 10 frames per second at 960 px. No second
+model runs. Frames are only drawn while the page is open, and the server listens on this computer only
+(127.0.0.1), because the preview shows people. Add `--blur-heads` to pixelate heads in it.
+Measured cost, busiest 5 minutes of the MEVA hour streamed live (full HD, 30 fps): 2.3% of frames skipped
+without the page open, 2.5% with it (2,206 preview frames sent); counts identical (7 in / 34 out).
+
 At the end the script prints the real-time check (`keeps_up: true`, `realtime_factor: 1.0`).
 `docker compose --profile streaming down` stops the services.
 
@@ -76,7 +84,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 94 tests
+pytest -q                                                             # 97 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.

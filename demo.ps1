@@ -3,6 +3,7 @@ RetailFlow live demo (Windows PowerShell). docs/12_DEMO.md explains each step.
 
   .\demo.ps1                 # 90 s live demo: shop-front camera -> API -> dashboard
   .\demo.ps1 -Seconds 300 -Video data\caviar\OneStopEnter2front\OneStopEnter2front.mpg
+  .\demo.ps1 -Preview         # also watch the annotated live video at http://127.0.0.1:8090
 
 What it does:
   1. starts PostgreSQL, the API, the dashboard and the RTSP server (Docker Compose);
@@ -15,7 +16,8 @@ param(
     [int]$Seconds = 90,
     [string]$Video = "data\caviar\TwoEnterShop1front\TwoEnterShop1front.mpg",
     [string]$Scene = "scenes\caviar_front.json",
-    [string]$Stream = "demo_front"
+    [string]$Stream = "demo_front",
+    [switch]$Preview
 )
 # Note: no $ErrorActionPreference = "Stop" here. In Windows PowerShell 5.1 that turns
 # Docker's normal progress output on stderr into a fatal error; exit codes are checked instead.
@@ -38,9 +40,21 @@ Start-Sleep 4
 try {
     Write-Host "3/4 Open http://localhost:3001/cameras/$((Get-Content $Scene -Raw | ConvertFrom-Json).camera_id) and pick the 'live' session." -ForegroundColor Green
     Start-Process "http://localhost:3001"
+    $extra = @()
+    if ($Preview) {
+        $extra = @("--preview", "8090")
+        Write-Host "   Live video with boxes, line, zones and heatmap: http://127.0.0.1:8090" -ForegroundColor Green
+        # Open the page once the preview server answers (it starts with run.py, below).
+        $null = Start-Job {
+            for ($i = 0; $i -lt 60; $i++) {
+                try { $null = Invoke-WebRequest http://127.0.0.1:8090/ -UseBasicParsing -TimeoutSec 1; Start-Process "http://127.0.0.1:8090"; break }
+                catch { Start-Sleep 1 }
+            }
+        }
+    }
     Write-Host "4/4 Running the pipeline for $Seconds s (Ctrl+C to stop)..." -ForegroundColor Cyan
     & $py run.py --source "rtsp://127.0.0.1:8554/$Stream" --scene $Scene --out "outputs\demo\$Stream" `
-        --api http://127.0.0.1:8000 --duration $Seconds | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|processed_frac|"skipped"|avg_proc_ms|Outputs'
+        --api http://127.0.0.1:8000 --duration $Seconds @extra | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|processed_frac|"skipped"|avg_proc_ms|Outputs'
 }
 finally {
     # Stop the simulator's whole process tree (only it, not other FFmpeg instances). With a venv,

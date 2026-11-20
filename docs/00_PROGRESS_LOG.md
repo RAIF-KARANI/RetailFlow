@@ -325,3 +325,7 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 - **Also fixed:** `demo.ps1` left the simulator's FFmpeg running (grandchild of the venv launcher).
 - **Learned:** a camera that keeps up on average can still fall behind at peak traffic. Check the busiest
   minutes, not only the average frame time, and measure with nothing else on the machine.
+- **Live preview:** `run.py --preview` / `demo.ps1 -Preview` serve the running pipeline's annotated frames
+  (boxes, line, zones, heatmap) at http://127.0.0.1:8090 as MJPEG, drawn only while someone watches.
+  Cost on the busiest 5 minutes: 2.3% → 2.5% skipped frames. **Learned:** the NumPy heatmap blend took
+  64 ms per full-HD frame; `cv2.blendLinear` takes 1.4 ms.
