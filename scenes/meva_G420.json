@@ -1,0 +1,90 @@
+{
+  "camera_id": "meva_G420",
+  "description": "MEVA school G420 (CC BY 4.0, Kitware/IARPA): indoor entrance lobby, elevated angled camera. Line across the threshold of the left (used) double door; IN = into the building. Zones from the detected traffic of 2018-03-07 10:05-11:05.",
+  "profile": "standard",
+  "frame_size": [
+    1920,
+    1072
+  ],
+  "line": {
+    "p1": [
+      780.0,
+      700.0
+    ],
+    "p2": [
+      1140.0,
+      780.0
+    ],
+    "in_point": [
+      900.0,
+      950.0
+    ],
+    "band_px": 15.0
+  },
+  "zones": [
+    {
+      "name": "doormat",
+      "polygon": [
+        [
+          700.0,
+          730.0
+        ],
+        [
+          1060.0,
+          800.0
+        ],
+        [
+          1010.0,
+          910.0
+        ],
+        [
+          650.0,
+          850.0
+        ]
+      ]
+    },
+    {
+      "name": "stairs_top",
+      "polygon": [
+        [
+          0.0,
+          700.0
+        ],
+        [
+          640.0,
+          640.0
+        ],
+        [
+          700.0,
+          1072.0
+        ],
+        [
+          0.0,
+          1072.0
+        ]
+      ]
+    },
+    {
+      "name": "lobby_right",
+      "polygon": [
+        [
+          960.0,
+          820.0
+        ],
+        [
+          1560.0,
+          860.0
+        ],
+        [
+          1560.0,
+          1072.0
+        ],
+        [
+          880.0,
+          1072.0
+        ]
+      ]
+    }
+  ],
+  "homography": null
+}

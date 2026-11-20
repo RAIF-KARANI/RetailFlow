@@ -84,6 +84,31 @@ class Heatmap:
         return cv2.addWeighted(background, 1 - alpha, col, alpha, 0)
 
 
+def overlay_colors(grid: np.ndarray, size: tuple[int, int], sigma_cells: float = 2.0,
+                   min_frac: float = 0.03) -> tuple[np.ndarray, np.ndarray]:
+    """Colour image + alpha mask (both at image `size` = (w, h)) for drawing a heatmap
+    over live video. Unlike `render`, cells nobody visited stay transparent, so the
+    camera picture is only tinted where people have spent time."""
+    g = cv2.GaussianBlur(grid.astype(np.float32), (0, 0), sigma_cells)
+    pos = g[g > 0]
+    # Scale to the 99th percentile, not the maximum: one spot where someone stood for
+    # minutes would otherwise make every other visited area nearly invisible.
+    m = float(np.percentile(pos, 99)) if pos.size else 0.0
+    v = np.sqrt(np.clip(g / m, 0, 1)) if m > 0 else np.zeros_like(g)
+    col = cv2.applyColorMap((v * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    col = cv2.resize(col, size, interpolation=cv2.INTER_LINEAR)
+    # Visited cells get at least 20 % opacity, the hottest 65 %; unvisited stay clear.
+    alpha = np.where(v > min_frac, 0.20 + 0.45 * v, 0.0)
+    alpha = cv2.resize(alpha.astype(np.float32), size, interpolation=cv2.INTER_LINEAR)
+    return col, alpha
+
+
+def blend_overlay(image: np.ndarray, col: np.ndarray, alpha: np.ndarray) -> None:
+    """Blend an overlay from `overlay_colors` into `image`, in place."""
+    a = alpha[..., None]
+    image[:] = (image * (1 - a) + col * a).astype(np.uint8)
+
+
 def heatmap_from_table(table, frame_size, fps, cell_px=4, homography=None) -> Heatmap:
     """Offline heatmap from a tracks or ground-truth table (feet points)."""
     hm = Heatmap(frame_size, fps, cell_px, homography)

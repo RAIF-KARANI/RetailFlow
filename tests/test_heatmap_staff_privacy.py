@@ -43,6 +43,18 @@ def test_similarity():
     assert similarity(a, a.T[::-1])["pearson"] < 0.5
 
 
+def test_overlay_only_tints_visited_area():
+    from retailflow.heatmap import blend_overlay, overlay_colors
+    hm = Heatmap((80, 40), fps=1, cell_px=4)
+    for _ in range(5):
+        hm.add([(10, 10)])
+    col, alpha = overlay_colors(hm.grid, (80, 40), sigma_cells=1.0)
+    assert alpha.shape == (40, 80) and alpha[10, 10] > 0.3 and alpha[35, 75] == 0
+    img = np.full((40, 80, 3), 100, np.uint8)
+    blend_overlay(img, col, alpha)
+    assert (img[35, 75] == 100).all() and not (img[10, 10] == 100).all()
+
+
 def test_median_background_removes_moving_person():
     frames = [np.full((4, 4, 3), 100, np.uint8) for _ in range(5)]
     frames[0][1, 1] = 255                    # a "person" in one frame only

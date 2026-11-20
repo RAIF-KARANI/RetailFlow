@@ -307,3 +307,17 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 
 ### Phase 8 status
 - Done and committed. Project complete for this brief.
+
+---
+
+## After Phase 8: one hour of real footage (MEVA) and live heatmap overlay
+
+- **Data:** MEVA (CC BY 4.0) camera G420, indoor entrance lobby, busiest continuous hour (914 MB).
+  Camera picked from a 3 MB slice of every camera (`tools/meva_index.py`, `tools/download_data.md` §5).
+- **New options:** `--heatmap-overlay` (heatmap so far tinted onto the saved video or preview) and
+  `--duration SECONDS` (stops after that much video at the source's own fps; `demo.ps1` used to assume 25 fps).
+- **One hour live with the API:** 108,000 frames, 89 in / 122 out, 336 zone visits, 22.0 ms per frame on
+  average. It did **not** keep up through the rush minutes (real-time factor 0.962, 71 s lag at the end):
+  details and fixes in doc 08 §9.
+- **Learned:** a camera that keeps up on average can still fall behind at peak traffic. Check the busiest
+  minutes, not only the average frame time.

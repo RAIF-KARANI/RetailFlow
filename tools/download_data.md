@@ -16,6 +16,7 @@ retail CCTV. No overhead (top-down) views and no moving cameras.
 | CAVIAR (Portugal shopping centre) | counting, zones, dwell, multi-camera | 2 static views per scene: angled down the corridor ("cor") and facing the shop fronts ("front") | 581 MB (52 videos + 52 GT files) | Creative Commons BY-SA; acknowledge the EC-funded CAVIAR project (IST 2001 37540) |
 | MOT17 (static train sequences 02, 04, 09) | counting and tracking in medium/busy scenes | static, elevated, angled street/square views | 5.6 GB zip, ~1 GB extracted for 3 sequences | CC BY-NC-SA 3.0 (MOTChallenge) |
 | MOT20 (train sequences) | very busy scenes | static, elevated, angled | 4.8 GB zip (Phase 3) | CC BY-NC-SA 3.0 (MOTChallenge) |
+| MEVA (one camera, one hour) | long real-footage test | static elevated indoor entrance camera | 914 MB (12 clips) | CC BY 4.0 (Kitware Inc. and IARPA) |
 | MMPTRACK | multi-camera (only if feasible) | calibrated multi-view, includes retail | not downloaded (no public link; size not published) | Research use only; signed user agreement e-mailed to the organisers |
 
 ## 1. CAVIAR
@@ -90,6 +91,27 @@ organisers; there is no direct download link and no published size (about 5 h tr
 video, 640x320 at 15 fps, 5 environments including retail, calibrated cameras, cross-camera IDs).
 Signing and sending the agreement is the project owner's decision, so it was not requested
 (docs/11_MULTI_CAMERA.md §1).
+
+## 5. MEVA (long real-footage test, after Phase 8)
+
+Source: <https://mevadata.org> (Kitware Inc. and IARPA), **CC BY 4.0**. Public S3 bucket
+`mevadata-public-01`, no account needed. 3,956 ground-camera clips of 5 minutes (476 GB in total),
+1920x1072 or 1920x1080 H.264 at 30 fps, recorded at a training site with hired actors.
+There are no in/out counts in the main release, so it is used for **long-run** testing (stability,
+real time, plausibility), not for accuracy.
+
+```powershell
+python tools/meva_index.py      # file names + sizes only -> outputs/meva_index.csv (no video)
+```
+
+Downloaded for the test: camera **school G420** (indoor entrance lobby, elevated angled view),
+2018-03-07 10:05-11:05, the busiest continuous hour by file size: 12 clips, **914 MB**, joined
+without re-encoding into `data/meva/G420_2018-03-07_10-05_1h.mp4` (FFmpeg concat, `-c copy`).
+Clips were fetched over HTTPS from `https://mevadata-public-01.s3.amazonaws.com/<key>`.
+Picking the camera used one 3 MB slice of a midday clip from each camera (about 75 MB in total).
+
+Attribution: MEVA by Kitware Inc. and IARPA, CC BY 4.0. Corona et al., "MEVA: A Large-Scale
+Multiview, Multimodal Video Dataset for Activity Detection", WACV 2021.
 
 ## Verify
 

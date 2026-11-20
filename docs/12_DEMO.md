@@ -36,6 +36,15 @@ These are single clips. The reliable numbers are the group results in `10_RESULT
 ![Corridor](img/demo_cor.jpg)
 ![MOT20-02 crowd](img/demo_mot20.jpg)
 
+**Heatmap on the playing video:** add `--heatmap-overlay` (with `--save-video` or `--show`).
+The frame is tinted where people have spent time so far, building up as the video plays. Only
+visited areas are coloured. For the live overlay everyone counts at once; the saved
+`heatmap.png` and the dashboard still drop staff and mannequins.
+
+**Your own video:** first draw the line and zones on one of its frames with
+`python tools/setup_scene.py --source my_video.mp4 --camera my_cam` (writes `scenes/my_cam.json`),
+then run `python run.py --source my_video.mp4 --scene scenes/my_cam.json`. `--duration 600` stops after 10 minutes.
+
 ## B. Live camera → dashboard (5 minutes)
 
 ```powershell
@@ -67,7 +76,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 85 tests
+pytest -q                                                             # 88 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.

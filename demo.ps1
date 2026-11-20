@@ -40,7 +40,7 @@ try {
     Start-Process "http://localhost:3001"
     Write-Host "4/4 Running the pipeline for $Seconds s (Ctrl+C to stop)..." -ForegroundColor Cyan
     & $py run.py --source "rtsp://127.0.0.1:8554/$Stream" --scene $Scene --out "outputs\demo\$Stream" `
-        --api http://127.0.0.1:8000 --max-frames ($Seconds * 25) | Select-String '"in"|"out"|keeps_up|realtime_factor|Outputs'
+        --api http://127.0.0.1:8000 --duration $Seconds | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|avg_proc_ms|Outputs'
 }
 finally {
     # Stop the simulator and the FFmpeg process it started (only those, not other FFmpeg instances).

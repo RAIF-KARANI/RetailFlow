@@ -156,3 +156,16 @@ Format: **problem → cause → fix**. Newest at the bottom.
 - **Cause:** in Windows PowerShell 5.1, `$ErrorActionPreference = "Stop"` turns any text a native
   program writes to stderr into a fatal error, and Docker writes its normal progress there.
 - **Fix:** the script runs Docker through `cmd /c ... >NUL 2>&1` and checks `$LASTEXITCODE`.
+
+## After Phase 8
+
+### One-hour live MEVA run fell 71 s behind ("reader is too slow" in MediaMTX)
+- **Symptom:** `keeps_up: false`, `realtime_factor` 0.962; MediaMTX discarded packets and the log has
+  249 H.264 "error while decoding MB" lines.
+- **Cause:** in the busiest minutes (many people at once) one 1920×1072 frame takes longer than its
+  33 ms; measured offline 27.3 fps on a busy stretch. MediaMTX then drops packets for the slow reader.
+- **Status:** documented, not fixed (doc 08 §9 lists the options).
+
+### Heatmap overlay was almost invisible
+- **Cause:** colours were scaled to the maximum cell, and one spot where people stood still dominated.
+- **Fix:** scale to the 99th percentile and give every visited cell at least 20% opacity.

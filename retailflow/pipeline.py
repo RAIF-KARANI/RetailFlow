@@ -40,7 +40,7 @@ from retailflow.config import Scene
 from retailflow.counting import IN, OUT, CountingConfig, LineCounter
 from retailflow.detector import PersonTracker
 from retailflow.events import CsvEventWriter, Event, MultiSink
-from retailflow.heatmap import Heatmap, median_background
+from retailflow.heatmap import Heatmap, blend_overlay, median_background, overlay_colors
 from retailflow.privacy import blur_heads
 from retailflow.sources import FrameSource
 from retailflow.staff import StaffFilter
@@ -111,7 +111,8 @@ class Pipeline:
 
     def __init__(self, scene: Scene, tracker: PersonTracker, counting: CountingConfig,
                  out_dir: str | Path, save_video: bool = False, run_info: dict | None = None,
-                 blur: bool = False, zone_cfg: ZoneConfig = ZoneConfig(), sinks=()):
+                 blur: bool = False, zone_cfg: ZoneConfig = ZoneConfig(), sinks=(),
+                 heat_overlay: bool = False):
         self.scene = scene
         self.tracker = tracker
         self.counting = counting
@@ -122,6 +123,7 @@ class Pipeline:
         self.blur = blur
         self.zone_cfg = zone_cfg
         self.sinks = list(sinks)      # extra event sinks, e.g. ApiEventSender
+        self.heat_overlay = heat_overlay
 
     def _close_track(self, tid: int, buf: _TrackBuffer, heat: Heatmap, staff: StaffFilter,
                      events: MultiSink, frame: int, ts: float) -> None:
@@ -161,6 +163,12 @@ class Pipeline:
         def frame_time(f: int) -> float:
             return recent_ts.get(f, round(f / fps, 3))
         buffers: dict[int, _TrackBuffer] = {}          # live tracks, for end-of-track decisions
+        # Live overlay heatmap (--heatmap-overlay): every person counts AT ONCE, because the
+        # staff / mannequin decision only exists when a track ends. The saved heatmap and the
+        # dashboard keep using the filtered one (`heat`).
+        live_heat = Heatmap((source.width, source.height), fps, heatmap_cell_px(source.width))
+        overlay = None
+        overlay_every = max(1, round(fps / 2))         # recolour twice per second
         track_end_gap = max(1, round(TRACK_END_S * fps))
         self.static_ids: set[int] = set()
 
@@ -223,6 +231,13 @@ class Pipeline:
                 img = frame.image
                 if self.blur:
                     blur_heads(img, [(p.x1, p.y1, p.x2, p.y2) for p in people])
+                if self.heat_overlay:
+                    pts = [pt for tid, pt in feet.items() if not staff.is_staff(tid)]
+                    if pts:
+                        live_heat.add(pts)
+                    if overlay is None or fi % overlay_every == 0:
+                        overlay = overlay_colors(live_heat.grid, (img.shape[1], img.shape[0]))
+                    blend_overlay(img, *overlay)
                 draw.draw_zones(img, self.scene.zones, zones.occupancy())
                 draw.draw_line(img, self.scene.line, band)
                 draw.draw_people(img, people, self.counting.point, staff.staff)

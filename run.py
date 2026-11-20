@@ -45,14 +45,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--once-per-direction", action="store_true")
     p.add_argument("--fps", type=float, default=None, help="override source fps (image folders)")
     p.add_argument("--max-frames", type=int, default=None)
+    p.add_argument("--duration", type=float, default=None, metavar="SECONDS",
+                   help="stop after this much video time (uses the source's own fps)")
     p.add_argument("--save-video", action="store_true")
     p.add_argument("--show", action="store_true", help="live preview window (press q to stop)")
     p.add_argument("--api", default=None, metavar="URL",
                    help="also send events to the RetailFlow API, e.g. http://localhost:8000")
+    p.add_argument("--heatmap-overlay", action="store_true",
+                   help="tint the saved video / preview with the heatmap so far (builds up as it plays)")
     p.add_argument("--blur-heads", action="store_true",
                    help="pixelate heads in the saved video / preview (detection still uses the original)")
     p.add_argument("--device", default="0")
     return p
+
+
+def apply_duration(source: FrameSource, seconds: float | None) -> None:
+    """--duration: stop after `seconds` of video at the source's own fps (also caps --max-frames)."""
+    if seconds:
+        n = int(round(seconds * source.fps))
+        source.max_frames = n if source.max_frames is None else min(n, source.max_frames)
 
 
 def main() -> None:
@@ -72,13 +83,15 @@ def main() -> None:
     run_info = {"profile": profile_name, "model": model, "tracker": tracker_name,
                 "imgsz": imgsz, "conf": conf}
     source = FrameSource(args.source, fps=args.fps, max_frames=args.max_frames)
+    apply_duration(source, args.duration)
     sinks = []
     if args.api:
         sender = ApiEventSender(args.api, scene, args.source, source.fps, run_info)
         print(f"API session {sender.session_id}")
         sinks.append(sender)
     summary = Pipeline(scene, tracker, counting, out, args.save_video, run_info,
-                       blur=args.blur_heads, sinks=sinks).run(source, show=args.show)
+                       blur=args.blur_heads, sinks=sinks,
+                       heat_overlay=args.heatmap_overlay).run(source, show=args.show)
     print(json.dumps(summary, indent=2))
     print(f"Outputs in {out}")
 

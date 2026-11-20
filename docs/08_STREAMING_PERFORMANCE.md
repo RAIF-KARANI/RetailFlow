@@ -197,3 +197,42 @@ python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/Two
 - Lag is measured from when the pipeline opens the stream, so the constant network/decoder
   delay is not included. Only whether the pipeline keeps up is measured.
 - Speed depends on the laptop's power mode and temperature (see TROUBLESHOOTING, Phase 1).
+
+## 9. One hour of real footage, live (MEVA)
+
+After Phase 8 the system ran for a full hour on real CCTV-style footage: MEVA camera G420, an indoor
+school entrance lobby filmed from above at an angle, 2018-03-07 10:05–11:05 (1920×1072, 30 fps; licence
+and download in `tools/download_data.md` §5). The video was published as a live RTSP camera and processed
+with `--api` into the dashboard:
+
+```powershell
+.\demo.ps1 -Seconds 3600 -Video data\meva\G420_2018-03-07_10-05_1h.mp4 -Scene scenes\meva_G420.json -Stream meva_g420
+```
+
+| Measure | Result |
+|---|---|
+| Frames processed | 108,000 (3,600 s of video), no crash, no restart |
+| Counts (IN = into the building) | 89 in / 122 out (no staff or static tracks flagged) |
+| Zone visits | 336: `stairs_top` 233 (median dwell 4.9 s), `lobby_right` 68 (4.2 s), `doormat` 35 (3.3 s) |
+| Track IDs | 836 |
+| Processing time | 22.0 ms per frame on average (budget 33.3 ms) |
+| Real-time check | **did not keep up** over the whole hour: `realtime_factor` 0.962, lag at the end 70.9 s |
+| API / dashboard | same counts and zones from `/api/sessions/<id>/summary` |
+
+**Where it fell behind.** Lag stayed flat at 2.4 s for the first 20 minutes, then rose in two steps,
+to about 22 s around minutes 24–28 and to about 71 s around minutes 40–48, and stayed flat again
+after each step. MediaMTX logged "reader is too slow" in exactly those minutes (about 52,000
+discarded RTP packets after the first minute), and these are the busiest minutes of the hour (up to 56
+zone/line events per minute, against fewer than 15 in most minutes). Run offline on a 5-minute busy
+stretch (minutes 40–45), the pipeline needs 28.1 ms per frame for processing and reaches **27.3 fps**
+including decoding, below the camera's 30 fps. On a quiet stretch (minutes 10–15) it needs 23.3 ms
+and reaches 31.9 fps: above 30, but with little margin. This camera costs more per frame than
+MOT17-09 in §6 (17.7 ms), so the "2 full-HD cameras" capacity there does not hold for it.
+
+So: **one full-HD camera keeps up on this laptop in normal traffic, only just, and not in rush minutes.** Frames
+that arrive while it is behind are dropped by the RTSP server, so crossings in those minutes can be
+missed (about 71 s of the hour, 2%). MEVA has no in/out ground truth, so the counts cannot be scored.
+
+Ways to fix it (not done): read the stream in its own thread and keep only the newest frame, so a slow
+moment skips whole frames instead of losing packets mid-frame (the likely cause of the 249 H.264 decode
+errors in the log); decode on the GPU (NVDEC); or use a smaller input size or YOLO26s on this camera.
