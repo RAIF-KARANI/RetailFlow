@@ -102,7 +102,12 @@ export type StoreState = {
   people?: StorePerson[];
   camera_people_now?: Record<string, number>;
   camera_moves?: { cameras: string[]; matrix: number[][] };
+  heatmap?: FloorHeat;
 };
+
+// Person-seconds on the floor, counted once per store-wide person per second; sparse cells.
+export type FloorHeat = { cell: number; x0: number; y0: number; rows: number; cols: number;
+  total_s: number; cells: [number, number, number][] };
 
 export type StoreRun = { run_id: string; store_id: string; run_info: Record<string, unknown>; finished: boolean;
   state: StoreState; summary: Record<string, unknown> | null };

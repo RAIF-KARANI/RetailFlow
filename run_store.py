@@ -7,11 +7,15 @@ What it does:
   1. every camera's video is replayed at real-time speed in its own thread, and the
      pipeline always takes the NEWEST frame (as from a live camera; frames it has no
      time for are skipped, and counted);
-  2. each camera is analysed up to `--analysis-fps` times per second: one shared
-     detector, then each camera's own tracker (retailflow/detector.py MultiCameraTracker);
-  3. every `--link-every` seconds the cameras' tracks are linked into store-wide
-     people (floor position + clothing colours, colours in memory only), with stable
-     person numbers, and the store state goes to the API / dashboard.
+  2. each camera is analysed up to `--analysis-fps` times per second: the due cameras'
+     newest frames go through ONE detector call when a batch engine exists
+     (models/yolo26m_960_b16.engine, tools/export_models.py --max-batch 16), then each
+     camera's own tracker (retailflow/detector.py MultiCameraTracker);
+  3. every `--link-every` seconds the new tracks go to a separate LINKING PROCESS, which
+     links them into store-wide people (floor position + clothing colours, colours in
+     memory only) with stable person numbers and sends the store state (incl. a floor
+     heatmap) to the API / dashboard. A thread was tried first: its pandas work shared
+     the GIL with detection and starved it. Detection never waits for linking.
 
 No RTSP here: re-encoding 15 full-HD streams would need the CPU the pipeline needs
 (single cameras over RTSP: run.py / demo.ps1). Outputs in outputs/store/<store>/<tag>/:
@@ -24,6 +28,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import multiprocessing as mp
 import time
 from pathlib import Path
 
@@ -34,7 +39,7 @@ from retailflow.detector import MultiCameraTracker
 from retailflow.profiles import get_profile
 from retailflow.sender import StoreApiClient
 from retailflow.sources import LatestFrameReader
-from retailflow.store_live import StoreLinker, load_store
+from retailflow.store_live import StoreLinker, link_worker, load_store, take_delta
 
 
 def main() -> None:
@@ -45,9 +50,11 @@ def main() -> None:
     p.add_argument("--link-every", type=float, default=3.0, help="seconds between store-wide re-links")
     p.add_argument("--cams", nargs="*", default=None, help="only these cameras")
     p.add_argument("--no-colour", action="store_true", help="link on floor position only")
-    p.add_argument("--cpu-decode", action="store_true", help="decode videos on the CPU (default: GPU if available)")
+    p.add_argument("--hw-decode", action="store_true", help="decode videos on the GPU (default: CPU)")
     p.add_argument("--api", default=None, metavar="URL")
     p.add_argument("--profile", default="standard")
+    p.add_argument("--batch", type=int, default=None,
+                   help="images per detector call (default: 16 if models/yolo26m_960_b16.engine exists, else 1)")
     p.add_argument("--tag", default=None)
     args = p.parse_args()
 
@@ -58,15 +65,20 @@ def main() -> None:
     out = Path("outputs/store") / store.store_id / tag
     prof = get_profile(args.profile)
     weights = prof.weights("auto")
-    mct = MultiCameraTracker(weights, prof.tracker, prof.imgsz, prof.conf, 0, cams)
+    batch_engine = Path(f"models/yolo26m_{prof.imgsz}_b16.engine")
+    batch = args.batch if args.batch is not None else (16 if batch_engine.exists() else 1)
+    if batch > 1 and str(weights).endswith(".engine"):
+        weights = str(batch_engine)
+    mct = MultiCameraTracker(weights, prof.tracker, prof.imgsz, prof.conf, 0, cams, batch=batch)
     linker = StoreLinker(store, appearance=not args.no_colour)
 
     # Warm up with a full batch before the cameras start (TensorRT context, CUDA kernels).
     blank = np.zeros((store.frame_h, 1920, 3), np.uint8)
     for _ in range(3):
-        mct.model.predict(blank, imgsz=prof.imgsz, device=0, verbose=False)
+        mct.model.predict([blank] * min(batch, len(cams)) if batch > 1 else blank,
+                          imgsz=prof.imgsz, device=0, verbose=False)
 
-    run_info = {"cameras": len(cams), "decode": "cpu" if args.cpu_decode else "hardware if available", "analysis_fps_target": args.analysis_fps, "model": weights,
+    run_info = {"cameras": len(cams), "batch": batch, "decode": "gpu" if args.hw_decode else "cpu", "analysis_fps_target": args.analysis_fps, "model": weights,
                 "tracker": prof.tracker, "imgsz": prof.imgsz, "colour": not args.no_colour,
                 "source": "video files replayed at real-time speed"}
     api = StoreApiClient(args.api, store.to_api(), run_info) if args.api else None
@@ -76,9 +88,10 @@ def main() -> None:
     max_frames = int(args.seconds * store.fps)
     readers = {}
     for c in cams:
-        # Hardware video decoding (GPU) when available: 15 full-HD software decoders would take
-        # the CPU the detector needs (measured: 25 ms instead of 10 ms per analysed frame).
-        hw = [] if args.cpu_decode else [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY]
+        # CPU decoding by default. GPU decoding did not speed the run up (the cost was turning
+        # frames into Python images, now limited by keep_every), and 15 GPU decoders next to
+        # the batch engine ran out of video memory ("hardware accelerator failed", 0x8007000e).
+        hw = [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY] if args.hw_decode else []
         cap = cv2.VideoCapture(str(store.scene_dir / c / "video.mp4"), cv2.CAP_FFMPEG, hw)
         # Only every n-th frame becomes an image: at most ~2x the analysis rate is ever needed.
         keep = max(1, int(store.fps / (2 * args.analysis_fps)))
@@ -96,20 +109,38 @@ def main() -> None:
     due = {c: 0.0 for c in cams}
     analysed = {c: 0 for c in cams}
     analysed_frames = {c: [] for c in cams}
-    batch_ms, link_ms, batches = [], [], 0
+    batch_ms, batches = [], 0
+    ctx = mp.get_context("spawn")
+    inbox, outbox = ctx.Queue(), ctx.Queue()
+    worker = ctx.Process(target=link_worker, daemon=True,
+                         args=(args.store, cams, not args.no_colour, args.api, api.run_id if api else None,
+                               inbox, outbox))
+    worker.start()
+    sent: dict = {}
     t0 = time.perf_counter()
-    last_link = t0
-    links = None
+    next_link = t0 + args.link_every
+    result = None
     try:
         while not all(r.finished for r in readers.values()):
             now = time.perf_counter()
             frames, index = {}, {}
-            for c in cams:
-                if now >= due[c]:
-                    got = readers[c].newest()
-                    if got is not None:
-                        index[c], frames[c] = got
-                        due[c] = max(due[c] + interval, now)     # keep the rate, never bunch up
+            if batch > 1:
+                # One tick for all cameras: the batch keeps the same size from call to call.
+                # (Cameras picked one by one gave a different batch size every call, and each
+                # new size made the TensorRT backend re-allocate: 611 ms per batch instead of ~170.)
+                if now >= due[cams[0]]:
+                    for c in cams:
+                        got = readers[c].newest()
+                        if got is not None:
+                            index[c], frames[c] = got
+                    due[cams[0]] = max(due[cams[0]] + interval, now)
+            else:
+                for c in cams:
+                    if now >= due[c]:
+                        got = readers[c].newest()
+                        if got is not None:
+                            index[c], frames[c] = got
+                            due[c] = max(due[c] + interval, now)     # keep the rate, never bunch up
             if not frames:
                 time.sleep(0.003)
                 continue
@@ -124,26 +155,30 @@ def main() -> None:
                     writers[c].writerow([index[c], q.track_id, f"{q.x1:.1f}", f"{q.y1:.1f}", f"{q.x2:.1f}",
                                          f"{q.y2:.1f}", f"{q.conf:.3f}"])
                 linker.add(c, index[c], people, frames[c])
-            if time.perf_counter() - last_link >= args.link_every:
-                tl = time.perf_counter()
-                links = linker.relink()
-                state = linker.state(links)
-                link_ms.append((time.perf_counter() - tl) * 1000)
-                last_link = time.perf_counter()
-                if api:
-                    api.state(state)
-                print(f"t={state['t']:6.1f}s  people now {len(state['people_now']):3d}  "
-                      f"visitors {state['unique_people']:4d}  link {link_ms[-1]:.0f} ms", flush=True)
+            if time.perf_counter() >= next_link:          # hand the new tracks to the linking process
+                inbox.put(("delta", *take_delta(linker, sent)))
+                next_link += args.link_every
+        wall = time.perf_counter() - t0
+        inbox.put(("final", *take_delta(linker, sent)))
+        result = outbox.get(timeout=600)
+    except BaseException as e:
+        # Close the run on the dashboard even when it fails (else it stays "live" forever).
+        if api:
+            try:
+                api.finish({}, {"error": f"{type(e).__name__}: {e}"})
+            except Exception:
+                pass
+        raise
     finally:
+        if worker.is_alive():
+            worker.terminate()
         for r in readers.values():
             r.stop()
         for f in files.values():
             f.close()
 
-    wall = time.perf_counter() - t0
-    links = linker.relink()
-    state = linker.state(links)
-    links[["camera", "track_id", "person", "start", "end", "n"]].to_csv(out / "links.csv", index=False)
+    state, links, link_ms = result["state"], result["links"], result["link_ms"]
+    links.to_csv(out / "links.csv", index=False)
     per_cam = {c: {"analysed": analysed[c], "analysed_fps": round(analysed[c] / wall, 2),
                    "frames_skipped_by_reader": readers[c].skipped} for c in cams}
     summary = {**run_info, "seconds": args.seconds, "wall_s": round(wall, 1),

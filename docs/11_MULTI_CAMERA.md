@@ -197,7 +197,29 @@ each camera actually analysed):
 | Global IDF1, linked (floor + colour) | 0.509 / 0.369 | 0.306 | 0.197 (min 2–7) |
 | Re-link time, mean / max | – | 1.1 s / 2.2 s | 1.8 s / 5.5 s |
 
-**What this means:** the live store view works end to end, but at 3–4 analyses per second per camera the
+**Batch engine and a linking process** (added afterwards):
+- `models/yolo26m_960_b16.engine` (`python tools/export_models.py --from-fp16-onnx models/yolo26m.fp16.onnx
+  --imgsz 960 --opt-hw 544 960 --max-batch 16`, 300 s to build) takes up to 16 frames per call. On 15
+  full-HD frames: 232 ms one at a time vs 171 ms as one batch (15.4 → 11.4 ms per frame), same 68 people found.
+  All cameras are processed on one tick so the batch size stays the same: picking cameras one by one gave a
+  different batch size every call and 611 ms per batch.
+- Linking runs in a **separate process** that receives only new tracks every 3 s. A thread was tried first;
+  its pandas work held the GIL and starved detection (NMS time-outs, video falling behind).
+- Videos are decoded on the CPU: 15 GPU decoders next to the batch engine ran out of video memory.
+
+| 15 cameras, 7 minutes live | Before | **Batch + linking process** |
+|---|---|---|
+| Analyses per camera per second (target 5) | 3.3 | **4.88** |
+| Detector time per 15-frame batch | – | 179 ms |
+| Global IDF1, minutes 0–2 | 0.306 (2-min run) | 0.413 |
+| Global IDF1, minutes 2–7 | 0.197 | **0.294** (offline: 0.369) |
+
+**Floor heatmap** (store page, "Heatmap"): person-seconds per 0.5 m cell, counted once per store-wide
+person per second (the median of the cameras that see their feet), drawn as a blueprint. The shape shows
+where people walk; the totals are inflated where one person has several numbers (298 person-minutes in 7
+minutes, while 31 people can give at most 217).
+
+**What this meant before the batch engine:** the live store view worked end to end, but at 3–4 analyses per second per camera the
 per-camera tracks break more, so store-wide IDs are clearly worse than offline, and "visitors so far"
 over-counts heavily (939 store-wide numbers seen ≥ 2 s in 7 minutes for 31 people). Re-linking also
 still slows down as a run gets longer, which lowers the analysis rate. Next steps: a batch-enabled

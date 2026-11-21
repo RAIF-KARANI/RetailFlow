@@ -128,6 +128,14 @@ class StoreApiClient:
         self.run_id = r["run_id"]
         self.failed = 0
 
+    @classmethod
+    def attach(cls, base_url: str, store_id: str, run_id: str) -> "StoreApiClient":
+        """A client for a run that already exists (the linking process of run_store.py)."""
+        c = cls.__new__(cls)
+        c.base = base_url.rstrip("/").replace("//localhost:", "//127.0.0.1:")
+        c.store_id, c.run_id, c.failed = store_id, run_id, 0
+        return c
+
     def state(self, state: dict) -> None:
         try:
             _request("PUT", f"{self.base}/api/store-runs/{self.run_id}/state", state, timeout=10)

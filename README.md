@@ -80,7 +80,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (116 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (117 tests; the API integration test runs when the stack is up).
 
 ## How it works
 
@@ -129,7 +129,7 @@ scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             116 tests                                     docs/          everything above
+tests/             117 tests                                     docs/          everything above
 ```
 
 ## Data acknowledgements and licences

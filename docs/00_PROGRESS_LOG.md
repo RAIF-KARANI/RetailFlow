@@ -348,3 +348,7 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   per camera, re-linking every 3 s with stable numbers) and the dashboard's Stores page shows a live floor
   map. Live IDs are weaker than offline (global IDF1 0.197 vs 0.369, minutes 2–7) because each camera gets
   only 3–4 analyses per second (doc 11 §8).
+- **Batch engine, linking process, floor heatmap:** a batch-16 TensorRT engine and a separate linking process
+  raised the live rate from 3.3 to 4.88 analyses per camera per second and live global IDF1 (minutes 2–7)
+  from 0.197 to 0.294. The store page has a blueprint-style floor heatmap. **Learned:** a Python thread is
+  no place for heavy pandas work next to a real-time loop; keep TensorRT batch sizes constant.

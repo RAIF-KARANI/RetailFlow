@@ -89,7 +89,9 @@ python run_store.py --store scenes/stores/smartspaces_071.json --seconds 300 --a
 ```
 
 Open <http://localhost:3001>, section **Stores** → `smartspaces_071`: people now on the floor map with
-their store-wide number and 10 s trails, visitors so far, the people table and camera-to-camera moves.
+their store-wide number and 10 s trails, a blueprint-style floor **heatmap** (toggle), visitors so far, the
+people table and camera-to-camera moves. With `models/yolo26m_960_b16.engine` built, all cameras go through the
+detector as one batch (doc 11 §8).
 The store is synthetic, and live IDs are far from perfect (doc 11 §8): one person often gets several numbers.
 
 ## C. Reproduce the evaluation (hours of GPU time)
@@ -102,7 +104,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 116 tests
+pytest -q                                                             # 117 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import FloorMap from "@/components/FloorMap";
+import FloorMap, { HeatLegend } from "@/components/FloorMap";
 import { fmtTime, get, Store, StoreRun } from "@/lib/api";
 
 // One store: all its cameras on one floor, one store-wide number per person.
@@ -14,6 +14,7 @@ export default function StorePage() {
   const [rid, setRid] = useState("");
   const [run, setRun] = useState<StoreRun | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [layer, setLayer] = useState<"people" | "heat">("people");
 
   useEffect(() => {
     const load = () => get<Store>(`/api/stores/${encodeURIComponent(storeId)}`).then((s) => {
@@ -86,11 +87,21 @@ export default function StorePage() {
 
       {run && store && (
         <div className="panel">
-          <h2>Floor now</h2>
-          <FloorMap config={store.config} people={st.people_now ?? []} trails={st.trails ?? {}} />
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2>{layer === "heat" ? "Floor heatmap" : "Floor now"}</h2>
+            <div className="segmented" role="group" aria-label="Floor layer">
+              <button type="button" aria-pressed={layer === "people"} onClick={() => setLayer("people")}>People now</button>
+              <button type="button" aria-pressed={layer === "heat"} onClick={() => setLayer("heat")}>Heatmap</button>
+            </div>
+          </div>
+          <FloorMap config={store.config} people={st.people_now ?? []} trails={st.trails ?? {}}
+                    heat={st.heatmap} mode={layer} />
+          {layer === "heat" && st.heatmap ? <HeatLegend heat={st.heatmap} /> : null}
           <p className="muted">
-            Grid: 5 m. Grey squares: cameras. Dots: people now with their store-wide number and last 10 s.
-            The number comes from linking the cameras&apos; tracks by floor position and clothing colour;
+            {layer === "heat"
+              ? "Where people spent time since the run started: person-seconds per 0.5 m cell, each store-wide person counted once per second (not once per camera that saw them). Thin lines 1 m, thick 5 m; squares are cameras."
+              : "Thin lines 1 m, thick 5 m; squares are cameras. Dots: people now with their store-wide number and last 10 s."}
+            {" "}The number comes from linking the cameras&apos; tracks by floor position and clothing colour;
             colours are used in memory only and never stored.
           </p>
         </div>

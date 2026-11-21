@@ -224,3 +224,16 @@ Format: **problem → cause → fix**. Newest at the bottom.
 
 ### Docker Desktop's engine stopped answering (500 errors) more than once
 - **Fix:** quit and restart Docker Desktop; the stack then starts normally.
+
+### Batched detection was slower than one frame at a time (611 ms per batch)
+- **Cause:** cameras were picked one by one when due, so every call had a different batch size, and each new
+  size made the TensorRT backend re-allocate its buffers.
+- **Fix:** with a batch engine, all cameras are read on one tick; 179 ms per 15-frame batch.
+
+### Linking in a thread starved detection
+- **Cause:** the linker's pandas work held the GIL; detection hit "NMS time limit exceeded" and fell behind real time.
+- **Fix:** linking runs in its own process and receives only new tracks.
+
+### "hardware accelerator failed to decode picture" (0x8007000e) with 15 cameras
+- **Cause:** 15 GPU video decoders plus the batch engine ran out of video memory.
+- **Fix:** CPU decoding is the default (`--hw-decode` to try the GPU); it was not slower.

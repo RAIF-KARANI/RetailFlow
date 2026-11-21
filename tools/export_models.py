@@ -56,7 +56,8 @@ def export(model: str, imgsz: int, fmt: str) -> Path:
     return target
 
 
-def engine_from_fp16_onnx(fp16_onnx: Path, template_engine: Path, imgsz: int, opt_hw=(1088, 1920)) -> Path:
+def engine_from_fp16_onnx(fp16_onnx: Path, template_engine: Path, imgsz: int, opt_hw=(1088, 1920),
+                          max_batch: int = 1) -> Path:
     """Build a TensorRT engine straight from an FP16 ONNX file (fallback, docs/TROUBLESHOOTING).
 
     Ultralytics' engine export first converts the ONNX to FP16 with ModelOpt AutoCast, which
@@ -65,12 +66,15 @@ def engine_from_fp16_onnx(fp16_onnx: Path, template_engine: Path, imgsz: int, op
     the 960 export is reused, and only the TensorRT build is repeated with a larger shape
     range. The Ultralytics metadata header (class names, stride...) is copied from an
     existing engine, so Ultralytics loads both engines the same way.
+
+    `max_batch` > 1 builds an engine that takes up to that many images per call
+    (run_store.py: one detector call for all cameras), named yolo26m_<imgsz>_b<max_batch>.engine.
     """
     import json
 
     import tensorrt as trt
 
-    target = OUT / f"yolo26m_{imgsz}.engine"
+    target = OUT / (f"yolo26m_{imgsz}.engine" if max_batch == 1 else f"yolo26m_{imgsz}_b{max_batch}.engine")
     logger = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(logger)
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
@@ -81,7 +85,7 @@ def engine_from_fp16_onnx(fp16_onnx: Path, template_engine: Path, imgsz: int, op
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 4 << 30)
     profile = builder.create_optimization_profile()
     name = network.get_input(0).name
-    profile.set_shape(name, (1, 3, 32, 32), (1, 3, *opt_hw), (1, 3, imgsz, imgsz))
+    profile.set_shape(name, (1, 3, 32, 32), (max_batch, 3, *opt_hw), (max_batch, 3, imgsz, imgsz))
     config.add_optimization_profile(profile)
     t0 = time.perf_counter()
     plan = builder.build_serialized_network(network, config)
@@ -91,6 +95,7 @@ def engine_from_fp16_onnx(fp16_onnx: Path, template_engine: Path, imgsz: int, op
         n = int.from_bytes(f.read(4), byteorder="little")
         meta = json.loads(f.read(n).decode("utf-8"))
     meta["imgsz"] = [imgsz, imgsz]
+    meta["batch"] = max_batch
     blob = json.dumps(meta).encode("utf-8")
     with open(target, "wb") as f:
         f.write(len(blob).to_bytes(4, byteorder="little"))
@@ -108,10 +113,13 @@ def main() -> None:
     p.add_argument("--from-fp16-onnx", default=None, metavar="FILE",
                    help="build the engine directly from this FP16 ONNX (e.g. yolo26m.fp16.onnx), "
                         "copying metadata from models/yolo26m_960.engine")
+    p.add_argument("--max-batch", type=int, default=1, help="with --from-fp16-onnx: images per call (e.g. 16)")
+    p.add_argument("--opt-hw", type=int, nargs=2, default=[1088, 1920], help="with --from-fp16-onnx: tuned size")
     args = p.parse_args()
     if args.from_fp16_onnx:
         for s in args.imgsz:
-            engine_from_fp16_onnx(Path(args.from_fp16_onnx), OUT / "yolo26m_960.engine", s)
+            engine_from_fp16_onnx(Path(args.from_fp16_onnx), OUT / "yolo26m_960.engine", s,
+                                  tuple(args.opt_hw), args.max_batch)
         return
     for s in args.imgsz:
         for f in args.formats:

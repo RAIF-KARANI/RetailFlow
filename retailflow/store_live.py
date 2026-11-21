@@ -15,6 +15,7 @@ real clock, so none is invented.
 from __future__ import annotations
 
 import json
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,13 +24,14 @@ import numpy as np
 import pandas as pd
 
 from retailflow.appearance import MIN_H_PX, box_descriptor
-from retailflow.mtmc import MTMCConfig, floor_points, link
+from retailflow.mtmc import MTMCConfig, link
 
 DESC_EVERY_S = 1.0      # one colour sample per track per second at most
 DESC_MAX = 6            # ... and at most this many per track
 MIN_SEEN_S = 2.0        # a person counts as a visitor after this many seconds seen
 TRAIL_S = 10            # trail length shown on the floor map
 WINDOW_S = 120          # only tracks seen in the last WINDOW_S are re-linked; older people keep their number
+HEAT_CELL_M = 0.5       # floor heatmap cell size (metres)
 
 
 @dataclass
@@ -84,19 +86,29 @@ class StoreLinker:
         self.person_of: dict[tuple, int] = {}      # (camera, track) -> stable person number
         self.next_person = 1
         self.now_frame = 0
+        # add() runs in the detection loop, relink()/state() may run in another thread:
+        # the lock guards rows and colours; linking works on a copy taken under the lock.
+        self.lock = threading.Lock()
+        self._snap: tuple | None = None
 
     # ---- collect
     def add(self, cam: str, frame: int, people, image: np.ndarray | None = None) -> None:
-        self.now_frame = max(self.now_frame, frame)
         if not people:
+            with self.lock:
+                self.now_frame = max(self.now_frame, frame)
             return
-        t = pd.DataFrame([(frame, p.track_id, p.x1, p.y1, p.x2, p.y2) for p in people],
-                         columns=["frame", "track_id", "x1", "y1", "x2", "y2"])
-        t = floor_points(t, self.store.homographies[cam], self.store.frame_h, self.cfg)
-        self.rows[cam].extend(t[["frame", "track_id", "x1", "y1", "x2", "y2", "xw", "yw", "usable"]]
-                              .itertuples(index=False, name=None))
-        if self.use_app and image is not None:
-            self._sample_colours(cam, frame, people, image)
+        b = np.array([(p.x1, p.y1, p.x2, p.y2) for p in people], float)
+        Hi = np.linalg.inv(self.store.homographies[cam])
+        q = np.c_[(b[:, 0] + b[:, 2]) / 2, b[:, 3], np.ones(len(b))] @ Hi.T
+        xw, yw = q[:, 0] / q[:, 2], q[:, 1] / q[:, 2]
+        usable = b[:, 3] < self.store.frame_h - self.cfg.edge_px
+        rows = [(frame, p.track_id, *bb, float(x), float(y), bool(u))
+                for p, bb, x, y, u in zip(people, b.tolist(), xw, yw, usable)]
+        with self.lock:
+            self.now_frame = max(self.now_frame, frame)
+            self.rows[cam].extend(rows)
+            if self.use_app and image is not None:
+                self._sample_colours(cam, frame, people, image)
 
     def _sample_colours(self, cam, frame, people, image) -> None:
         boxes = np.array([[p.x1, p.y1, p.x2, p.y2] for p in people])
@@ -125,9 +137,18 @@ class StoreLinker:
                 self.desc[key] = [v.copy(), 1, frame]
 
     # ---- link
+    COLS = ["frame", "track_id", "x1", "y1", "x2", "y2", "xw", "yw", "usable"]
+
+    def _snapshot(self) -> tuple[dict, dict, int]:
+        """Copies of rows, colour sums and the current frame, taken under the lock."""
+        with self.lock:
+            rows = {c: list(r) for c, r in self.rows.items() if r}
+            desc = {k: v[0].copy() for k, v in self.desc.items()}
+            now = self.now_frame
+        return {c: pd.DataFrame(r, columns=self.COLS) for c, r in rows.items()}, desc, now
+
     def tracks(self) -> dict[str, pd.DataFrame]:
-        cols = ["frame", "track_id", "x1", "y1", "x2", "y2", "xw", "yw", "usable"]
-        return {c: pd.DataFrame(r, columns=cols) for c, r in self.rows.items() if r}
+        return self._snapshot()[0]
 
     def relink(self) -> pd.DataFrame:
         """Re-link the tracks seen in the last `window_s`; returns camera, track_id, person for all tracks.
@@ -136,8 +157,9 @@ class StoreLinker:
         (`window_s` is longer than the longest hand-off gap). Tracks that ended before the
         window keep the person number they had.
         """
-        all_cams = self.tracks()
-        cut = self.now_frame - self.window_s * self.store.fps
+        all_cams, desc, now = self._snapshot()
+        self._snap = (all_cams, now)
+        cut = now - self.window_s * self.store.fps
         cams, frozen = {}, []
         for c, t in all_cams.items():
             last = t.groupby("track_id").frame.max()
@@ -150,7 +172,7 @@ class StoreLinker:
         cams = {c: t for c, t in cams.items() if len(t)}
         app = None
         if self.use_app:
-            app = {k: v[0] / (np.linalg.norm(v[0]) or 1.0) for k, v in self.desc.items()}
+            app = {k: v / (np.linalg.norm(v) or 1.0) for k, v in desc.items()}
         links = link(cams, self.store.fps, self.cfg, appearance=app) if cams else pd.DataFrame(
             columns=["camera", "track_id", "global_id", "start", "end", "n"])
         frozen_df = pd.DataFrame(frozen, columns=["camera", "track_id", "person", "start", "end", "n"])
@@ -183,10 +205,11 @@ class StoreLinker:
 
     # ---- summarise
     def state(self, links: pd.DataFrame | None = None) -> dict:
-        fps, now = self.store.fps, self.now_frame
-        cams = self.tracks()
-        if links is None:
+        """Store summary for the dashboard, from the same snapshot as the last relink()."""
+        if links is None or self._snap is None:
             links = self.relink()
+        cams, now = self._snap
+        fps = self.store.fps
         if not cams or links.empty:
             return {"t": round(now / fps, 1), "people_now": [], "unique_people": 0, "people": [],
                     "camera_people_now": {}, "camera_moves": {"cameras": self.store.cameras, "matrix": []}}
@@ -232,4 +255,89 @@ class StoreLinker:
                    for c, g in recent.groupby("camera")}
         return {"t": round(now / fps, 1), "people_now": now_list, "trails": trails,
                 "unique_people": len(people), "people": people, "camera_people_now": cam_now,
-                "camera_moves": {"cameras": [c.replace("camera_", "") for c in names], "matrix": m}}
+                "camera_moves": {"cameras": [c.replace("camera_", "") for c in names], "matrix": m},
+                "heatmap": self._heatmap(allr)}
+
+    def _heatmap(self, allr: pd.DataFrame) -> dict:
+        """Person-seconds on the floor, counted once per store-wide person per second.
+
+        Each person's floor position in each second is the median of all cameras that saw
+        their feet, so someone seen by three cameras is not counted three times. Cells of
+        HEAT_CELL_M; sent sparse as [row, col, seconds].
+        """
+        x0, y0, x1, y1 = self.store.floor_bounds
+        cell = HEAT_CELL_M
+        cols, rows = int(np.ceil((x1 - x0) / cell)), int(np.ceil((y1 - y0) / cell))
+        u = allr[allr.usable]
+        pos = u.groupby(["person", "sec"])[["xw", "yw"]].median()
+        ci = np.floor((pos.xw.to_numpy() - x0) / cell).astype(int)
+        ri = np.floor((pos.yw.to_numpy() - y0) / cell).astype(int)
+        ok = (ci >= 0) & (ci < cols) & (ri >= 0) & (ri < rows)
+        grid = np.zeros((rows, cols), int)
+        np.add.at(grid, (ri[ok], ci[ok]), 1)
+        nz = np.argwhere(grid > 0)
+        return {"cell": cell, "x0": x0, "y0": y0, "rows": rows, "cols": cols,
+                "total_s": int(grid.sum()), "cells": [[int(r), int(c), int(grid[r, c])] for r, c in nz]}
+
+
+# ---- linking in its own process (run_store.py) ---------------------------------
+# A linking thread shares the GIL with detection: its pandas work starved the detector
+# (NMS time-outs, video falling behind). In a separate process it cannot.
+
+def take_delta(lk: "StoreLinker", sent: dict) -> tuple[dict, dict, int]:
+    """New rows per camera since the last call (positions in `sent`), all colour sums, current frame."""
+    with lk.lock:
+        delta = {}
+        for c, r in lk.rows.items():
+            k = sent.get(c, 0)
+            if len(r) > k:
+                delta[c] = r[k:]
+                sent[c] = len(r)
+        desc = {k: (v[0].copy(), v[1], v[2]) for k, v in lk.desc.items()}
+        return delta, desc, lk.now_frame
+
+
+def ingest(lk: "StoreLinker", delta: dict, desc: dict, now: int) -> None:
+    with lk.lock:
+        for c, r in delta.items():
+            lk.rows.setdefault(c, []).extend(r)
+        lk.desc = {k: [v[0], v[1], v[2]] for k, v in desc.items()}
+        lk.now_frame = max(lk.now_frame, now)
+
+
+def link_worker(store_path: str, cameras: list[str], appearance: bool, api_url: str | None,
+                run_id: str | None, inbox, outbox) -> None:
+    """Process: receive deltas, re-link, post the store state; on 'final' return links and state."""
+    import queue
+    import time
+
+    from retailflow.sender import StoreApiClient
+
+    store = load_store(store_path)
+    store.cameras = cameras
+    lk = StoreLinker(store, appearance=appearance)
+    api = StoreApiClient.attach(api_url, store.store_id, run_id) if api_url and run_id else None
+    link_ms: list[float] = []
+    while True:
+        msgs = [inbox.get()]
+        while True:                                   # catch up: merge everything queued
+            try:
+                msgs.append(inbox.get_nowait())
+            except queue.Empty:
+                break
+        final = False
+        for kind, delta, desc, now in msgs:
+            ingest(lk, delta, desc, now)
+            final = final or kind == "final"
+        t = time.perf_counter()
+        links = lk.relink()
+        state = lk.state(links)
+        link_ms.append((time.perf_counter() - t) * 1000)
+        if final:
+            outbox.put({"state": state, "links": links[["camera", "track_id", "person", "start", "end", "n"]],
+                        "link_ms": link_ms})
+            return
+        if api:
+            api.state(state)
+        print(f"t={state['t']:6.1f}s  people now {len(state['people_now']):3d}  "
+              f"visitors {state['unique_people']:4d}  link {link_ms[-1]:.0f} ms", flush=True)

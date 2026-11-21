@@ -83,3 +83,16 @@ def test_camera_position_from_projection_matrix():
     P = K @ np.c_[R, -R @ C]
     x, y = camera_floor_position(P)
     assert abs(x - 2) < 1e-6 and abs(y + 3) < 1e-6
+
+
+def test_floor_heatmap_counts_each_person_once_per_second():
+    lk = StoreLinker(store(), appearance=False)
+    for f in range(0, 300, 6):                          # 10 s, standing at (1.2, -0.3), two cameras
+        lk.add("camera_a", f, [box(1, 1.2, -0.3)])
+        lk.add("camera_b", f, [box(5, 1.2, -0.3)])
+    h = lk.state()["heatmap"]
+    assert h["total_s"] == 10                           # not 20: one person, not two cameras' worth
+    assert len(h["cells"]) == 1
+    r, c, v = h["cells"][0]
+    assert v == 10 and abs(h["x0"] + (c + 0.5) * h["cell"] - 1.2) <= h["cell"] / 2 + 1e-9
+    assert abs(h["y0"] + (r + 0.5) * h["cell"] + 0.3) <= h["cell"] / 2 + 1e-9

@@ -90,13 +90,14 @@ class MultiCameraTracker:
 
     `PersonTracker` loads one model per camera, and 15 TensorRT contexts do not fit
     in 8 GB of GPU memory. Here ONE model serves every camera, and each camera has its
-    own BoT-SORT/ByteTrack instance (same settings file as `PersonTracker`). Frames go
-    through the detector one at a time: the TensorRT engines are built for batch 1
-    (tools/export_models.py). Track IDs are per camera, as before.
+    own BoT-SORT/ByteTrack instance (same settings file as `PersonTracker`). With
+    `batch` > 1 the cameras' frames go through the detector together, up to `batch` per
+    call (needs a batch engine: tools/export_models.py --max-batch 16); with 1, one at a
+    time. Track IDs are per camera, as before.
     """
 
     def __init__(self, model: str, tracker: str, imgsz: int, conf: float, device: int | str,
-                 cameras: list[str]):
+                 cameras: list[str], batch: int = 1):
         from ultralytics.trackers.track import TRACKER_MAP
         from ultralytics.utils import YAML, IterableSimpleNamespace
         from ultralytics.utils.checks import check_yaml
@@ -104,14 +105,18 @@ class MultiCameraTracker:
         self.model = YOLO(model, task="detect")
         cfg = IterableSimpleNamespace(**YAML.load(check_yaml(TRACKERS.get(tracker, tracker))))
         self.trackers = {c: TRACKER_MAP[cfg.tracker_type](args=cfg) for c in cameras}
-        self.imgsz, self.conf, self.device = imgsz, conf, device
+        self.imgsz, self.conf, self.device, self.batch = imgsz, conf, device, max(1, batch)
 
     def update(self, frames: dict[str, np.ndarray]) -> dict[str, list[TrackedPerson]]:
         """Detect and track the given cameras' frames. Call with each camera's frames in order."""
         out = {}
-        for cam, img in frames.items():
-            r = self.model.predict(img, classes=[PERSON_CLASS], imgsz=self.imgsz,
-                                   conf=self.conf, device=self.device, verbose=False)[0]
+        cams = list(frames)
+        results = []
+        for i in range(0, len(cams), self.batch):
+            chunk = [frames[c] for c in cams[i:i + self.batch]]
+            results += self.model.predict(chunk if len(chunk) > 1 else chunk[0], classes=[PERSON_CLASS],
+                                          imgsz=self.imgsz, conf=self.conf, device=self.device, verbose=False)
+        for cam, r in zip(cams, results):
             tracks = self.trackers[cam].update(r.boxes.cpu().numpy(), frames[cam])
             # rows: x1, y1, x2, y2, track id, score, class, detection index
             out[cam] = [TrackedPerson(int(t[4]), float(t[0]), float(t[1]), float(t[2]), float(t[3]), float(t[5]))
