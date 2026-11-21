@@ -400,9 +400,12 @@ def get_store(store_id: str):
                                       (state->>'t')::float AS t, (state->>'unique_people')::int AS unique_people
                                FROM store_runs WHERE store_id = %s ORDER BY started_at DESC""",
                             (store_id,)).fetchall()
+        floors = [r["kind"] for r in conn.execute("SELECT kind FROM store_floors WHERE store_id = %s",
+                                                    (store_id,)).fetchall()]
     for r in runs:
         r["run_id"] = str(r["run_id"])
-    return {"store_id": s["store_id"], "description": s["description"], "config": s["config"], "runs": runs}
+    return {"store_id": s["store_id"], "description": s["description"], "config": s["config"], "runs": runs,
+            "floors": floors}
 
 
 @app.get("/api/store-runs/{rid}")
@@ -422,3 +425,33 @@ def delete_store(store_id: str):
     if not n:
         raise HTTPException(404, "unknown store")
     return {"deleted": store_id}
+
+
+class FloorIn(BaseModel):
+    content_type: str
+    data_b64: str
+
+
+@app.put("/api/stores/{store_id}/floor/{kind}")
+def put_store_floor(store_id: str, kind: str, body: FloorIn):
+    if kind not in ("blueprint", "photo") or body.content_type not in ("image/png", "image/jpeg"):
+        raise HTTPException(422, "kind must be blueprint or photo; PNG or JPEG")
+    with connect() as conn:
+        if conn.execute("SELECT 1 FROM stores WHERE store_id = %s", (store_id,)).fetchone() is None:
+            raise HTTPException(404, "unknown store")
+        conn.execute("""INSERT INTO store_floors (store_id, kind, content_type, data) VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (store_id, kind) DO UPDATE SET content_type = EXCLUDED.content_type,
+                                                                   data = EXCLUDED.data""",
+                     (store_id, kind, body.content_type, base64.b64decode(body.data_b64)))
+    return {"store_id": store_id, "kind": kind}
+
+
+@app.get("/api/stores/{store_id}/floor/{kind}")
+def get_store_floor(store_id: str, kind: str):
+    with connect() as conn:
+        r = conn.execute("SELECT content_type, data FROM store_floors WHERE store_id = %s AND kind = %s",
+                         (store_id, kind)).fetchone()
+    if r is None:
+        raise HTTPException(404, "no floor image")
+    return Response(content=bytes(r["data"]), media_type=r["content_type"],
+                    headers={"Cache-Control": "max-age=60"})

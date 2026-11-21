@@ -96,3 +96,20 @@ def test_floor_heatmap_counts_each_person_once_per_second():
     r, c, v = h["cells"][0]
     assert v == 10 and abs(h["x0"] + (c + 0.5) * h["cell"] - 1.2) <= h["cell"] / 2 + 1e-9
     assert abs(h["y0"] + (r + 0.5) * h["cell"] + 0.3) <= h["cell"] / 2 + 1e-9
+
+
+def test_store_zones_count_visits_dwell_and_moves():
+    from retailflow.config import Zone
+    st = store()
+    st.zones = (Zone("a", ((-5.0, -5.0), (0.0, -5.0), (0.0, 5.0), (-5.0, 5.0))),
+                Zone("b", ((0.0, -5.0), (5.0, -5.0), (5.0, 5.0), (0.0, 5.0))))
+    lk = StoreLinker(st, appearance=False)
+    for f in range(0, 600, 6):                     # 20 s: 10 s in zone a, then 10 s in zone b
+        x = -2.5 if f < 300 else 2.5
+        lk.add("camera_a", f, [box(1, x, 0.0)])
+    s = lk.state()
+    z = {r["zone"]: r for r in s["zones"]}
+    assert z["a"]["visits"] == 1 and z["b"]["visits"] == 1
+    assert 8 <= z["a"]["mean_dwell_s"] <= 11
+    assert z["b"]["now"] == 1 and z["a"]["now"] == 0
+    assert s["zone_moves"]["matrix"] == [[0, 1], [0, 0]]

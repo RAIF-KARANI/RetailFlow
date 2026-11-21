@@ -98,7 +98,7 @@ def main() -> None:
                 "source": "video files replayed at real-time speed"}
     if preview:
         run_info["preview_url"] = preview.url
-    api = StoreApiClient(args.api, store.to_api(), run_info) if args.api else None
+    api = StoreApiClient(args.api, store.to_api(), run_info, store.scene_dir) if args.api else None
     if api:
         print(f"API store run {api.run_id}", flush=True)
 

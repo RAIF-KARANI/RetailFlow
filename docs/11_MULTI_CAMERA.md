@@ -226,6 +226,20 @@ so the same person can be followed from camera to camera; "?" marks a track the 
 (`--no-blur` to switch off), frames are drawn only while the page is open, and the page has the Stop button;
 the store page on the dashboard shows "Watch live cameras" while such a run is live.
 
+**Floor plan and store zones.** The store has no plan, so `tools/build_floor_plan.py` makes one from the cameras:
+each camera's people-free background (median of 15 frames) is projected onto the floor with its homography, and
+the 15 views are stitched, each floor spot taken from the nearest camera. The result shows the floor as seen from
+above (checkouts, shelf bases, freezers, the storage room's blue floor); things standing on the floor are smeared
+away from the camera, and floor no camera sees stays black. A blueprint version keeps its outlines as light lines.
+The dashboard draws either under the map (Blueprint / Floor photo / Grid).
+Nine store zones were drawn on it in floor metres (`scenes/stores/smartspaces_071.json`; editor:
+`tools/setup_store_zones.py`; `tools/register_store.py` sends zones and floor images to the API). Per zone, from
+each store-wide person's floor position once per second and the same 2 s rule as camera zones: people now, visits,
+mean/median stay, and **zone-to-zone moves across the whole store**. In a 2-minute live run the moves only
+connect neighbouring zones (e.g. entrance ↔ checkouts 11 / 11, storage room ↔ drinks fridges 8 / 10, none from the
+entrance straight to the storage room), a plausibility check; there is no ground truth for these zones, and visit
+counts are inflated where one person has several numbers.
+
 **What this meant before the batch engine:** the live store view worked end to end, but at 3–4 analyses per second per camera the
 per-camera tracks break more, so store-wide IDs are clearly worse than offline, and "visitors so far"
 over-counts heavily (939 store-wide numbers seen ≥ 2 s in 7 minutes for 31 people). Re-linking also

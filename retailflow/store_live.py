@@ -24,7 +24,10 @@ import numpy as np
 import pandas as pd
 
 from retailflow.appearance import MIN_H_PX, box_descriptor
+from retailflow.config import Zone
 from retailflow.mtmc import MTMCConfig, link
+from retailflow.transitions import transition_counts
+from retailflow.zones import ZoneConfig, ZoneTracker
 
 DESC_EVERY_S = 1.0      # one colour sample per track per second at most
 DESC_MAX = 6            # ... and at most this many per track
@@ -46,12 +49,14 @@ class StoreConfig:
     frame_h: int = 1080
     fps: float = 30.0
     raw: dict = field(default_factory=dict)
+    zones: tuple = ()                               # store zones on the floor (metres), config "zones"
 
     def to_api(self) -> dict:
         """What the dashboard needs to draw the store (no video paths)."""
         return {"store_id": self.store_id, "description": self.description, "cameras": self.cameras,
                 "camera_xy": {c: [round(x, 2), round(y, 2)] for c, (x, y) in self.camera_xy.items()},
-                "floor_bounds": list(self.floor_bounds)}
+                "floor_bounds": list(self.floor_bounds),
+                "zones": [{"name": z.name, "polygon": [list(pt) for pt in z.polygon]} for z in self.zones]}
 
 
 def camera_floor_position(P: np.ndarray) -> tuple[float, float]:
@@ -71,8 +76,9 @@ def load_store(path: str | Path) -> StoreConfig:
         cal = json.loads((scene / c / "calibration.json").read_text())
         H[c] = np.array(cal["homography matrix"], float)
         pos[c] = camera_floor_position(np.array(cal["camera projection matrix"], float))
+    zones = tuple(Zone(z["name"], tuple(tuple(map(float, pt)) for pt in z["polygon"])) for z in d.get("zones") or [])
     return StoreConfig(d["store_id"], d.get("description", ""), scene, cams, H, pos,
-                       tuple(d["floor_bounds"]), d.get("frame_h", 1080), d.get("fps", 30.0), d)
+                       tuple(d["floor_bounds"]), d.get("frame_h", 1080), d.get("fps", 30.0), d, zones)
 
 
 class StoreLinker:
@@ -256,7 +262,43 @@ class StoreLinker:
         return {"t": round(now / fps, 1), "people_now": now_list, "trails": trails,
                 "unique_people": len(people), "people": people, "camera_people_now": cam_now,
                 "camera_moves": {"cameras": [c.replace("camera_", "") for c in names], "matrix": m},
-                "heatmap": self._heatmap(allr)}
+                "heatmap": self._heatmap(allr), **self._zone_stats(allr)}
+
+    def _zone_stats(self, allr: pd.DataFrame) -> dict:
+        """Store zones: people now, visits, dwell and zone-to-zone moves of store-wide people.
+
+        Uses each person's floor position once per second (median of the cameras that see
+        their feet) and the same 2 s enter / 2 s leave rule as camera zones (zones.py).
+        """
+        zones = list(self.store.zones)
+        if not zones:
+            return {}
+        u = allr[allr.usable]
+        pos = u.groupby(["sec", "person"])[["xw", "yw"]].median()
+        zt = ZoneTracker(zones, 1.0, ZoneConfig())
+        by_sec = {s: g.droplevel(0) for s, g in pos.groupby(level=0)} if len(pos) else {}
+        if by_sec:
+            for sec in range(min(by_sec), max(by_sec) + 1):
+                g = by_sec.get(sec)
+                pts = {} if g is None else {int(p): (float(r.xw), float(r.yw)) for p, r in g.iterrows()}
+                zt.update(sec, pts)
+        occupancy = zt.occupancy()                    # visits still open = people in the zone now
+        zt.finish()
+        visits = pd.DataFrame([v.__dict__ for v in zt.visits],
+                              columns=["track_id", "zone", "start_frame", "end_frame", "dwell_s", "truncated"])
+        names = [z.name for z in zones]
+        rows = []
+        for z in names:
+            v = visits[visits.zone == z]
+            rows.append({"zone": z, "now": int(occupancy.get(z, 0)), "visits": int(len(v)),
+                         "mean_dwell_s": round(float(v.dwell_s.mean()), 1) if len(v) else None,
+                         "median_dwell_s": round(float(v.dwell_s.median()), 1) if len(v) else None})
+        steps = transition_counts(visits)
+        idx = {z: i for i, z in enumerate(names)}
+        m = [[0] * len(names) for _ in names]
+        for (a, b), k in steps.items():
+            m[idx[a]][idx[b]] += k
+        return {"zones": rows, "zone_moves": {"zones": names, "matrix": m}}
 
     def _heatmap(self, allr: pd.DataFrame) -> dict:
         """Person-seconds on the floor, counted once per store-wide person per second.

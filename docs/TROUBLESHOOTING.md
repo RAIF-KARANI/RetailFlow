@@ -237,3 +237,7 @@ Format: **problem → cause → fix**. Newest at the bottom.
 ### "hardware accelerator failed to decode picture" (0x8007000e) with 15 cameras
 - **Cause:** 15 GPU video decoders plus the batch engine ran out of video memory.
 - **Fix:** CPU decoding is the default (`--hw-decode` to try the GPU); it was not slower.
+
+### Floor plan: six cameras projected nothing
+- **Cause:** "in front of the camera" was tested as z > 0, but some homographies are scaled by a negative number.
+- **Fix:** take the sign from a floor point the camera surely sees (bottom-centre of its image).

@@ -120,13 +120,36 @@ class StoreApiClient:
     A failed post is skipped (the next state replaces it); the run itself never stops for the API.
     """
 
-    def __init__(self, base_url: str, store: dict, run_info: dict | None = None):
+    def __init__(self, base_url: str, store: dict, run_info: dict | None = None, scene_dir=None):
         self.base = base_url.rstrip("/").replace("//localhost:", "//127.0.0.1:")
         self.store_id = store["store_id"]
         _request("PUT", f"{self.base}/api/stores/{self.store_id}", store)
+        if scene_dir is not None:
+            self.upload_floor(self.base, self.store_id, scene_dir)
         r = _request("POST", f"{self.base}/api/stores/{self.store_id}/runs", {"run_info": run_info or {}})
         self.run_id = r["run_id"]
         self.failed = 0
+
+    @staticmethod
+    def upload_floor(base_url: str, store_id: str, scene_dir) -> list[str]:
+        """Send the store's top-down floor images (tools/build_floor_plan.py), if they exist."""
+        from pathlib import Path
+        base = base_url.rstrip("/").replace("//localhost:", "//127.0.0.1:")
+        sent = []
+        bp = Path(scene_dir) / "floor_blueprint.png"
+        if bp.exists():
+            _request("PUT", f"{base}/api/stores/{store_id}/floor/blueprint",
+                     {"content_type": "image/png", "data_b64": base64.b64encode(bp.read_bytes()).decode()}, timeout=30)
+            sent.append("blueprint")
+        ph = Path(scene_dir) / "floor_photo.png"
+        if ph.exists():
+            ok, jpg = cv2.imencode(".jpg", cv2.imread(str(ph)), [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ok:
+                _request("PUT", f"{base}/api/stores/{store_id}/floor/photo",
+                         {"content_type": "image/jpeg", "data_b64": base64.b64encode(jpg.tobytes()).decode()},
+                         timeout=30)
+                sent.append("photo")
+        return sent
 
     @classmethod
     def attach(cls, base_url: str, store_id: str, run_id: str) -> "StoreApiClient":

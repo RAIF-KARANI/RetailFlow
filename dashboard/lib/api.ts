@@ -84,12 +84,14 @@ export type StoreConfig = {
   cameras: string[];
   camera_xy: Record<string, [number, number]>;
   floor_bounds: [number, number, number, number];   // x min, y min, x max, y max (metres)
+  zones?: { name: string; polygon: [number, number][] }[];
 };
 
 export type StoreRunRow = { run_id: string; run_info: Record<string, unknown>; started_at: string;
   finished_at: string | null; t: number | null; unique_people: number | null };
 
-export type Store = { store_id: string; description: string; config: StoreConfig; runs: StoreRunRow[] };
+export type Store = { store_id: string; description: string; config: StoreConfig; runs: StoreRunRow[];
+  floors?: string[] };
 
 export type PersonNow = { id: number; x: number; y: number; cameras: string[] };
 export type StorePerson = { id: number; first_s: number; last_s: number; seen_s: number; cameras: string[] };
@@ -103,6 +105,8 @@ export type StoreState = {
   camera_people_now?: Record<string, number>;
   camera_moves?: { cameras: string[]; matrix: number[][] };
   heatmap?: FloorHeat;
+  zones?: { zone: string; now: number; visits: number; mean_dwell_s: number | null; median_dwell_s: number | null }[];
+  zone_moves?: { zones: string[]; matrix: number[][] };
 };
 
 // Person-seconds on the floor, counted once per store-wide person per second; sparse cells.

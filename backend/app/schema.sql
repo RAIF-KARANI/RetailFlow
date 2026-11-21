@@ -86,3 +86,13 @@ CREATE TABLE IF NOT EXISTS store_runs (
     state       JSONB,
     summary     JSONB
 );
+
+-- Top-down floor images of a store (tools/build_floor_plan.py): kind 'blueprint' (PNG
+-- outlines) or 'photo' (JPEG of the stitched floor, people removed by a median).
+CREATE TABLE IF NOT EXISTS store_floors (
+    store_id     TEXT NOT NULL REFERENCES stores (store_id) ON DELETE CASCADE,
+    kind         TEXT NOT NULL CHECK (kind IN ('blueprint', 'photo')),
+    content_type TEXT NOT NULL,
+    data         BYTEA NOT NULL,
+    PRIMARY KEY (store_id, kind)
+);

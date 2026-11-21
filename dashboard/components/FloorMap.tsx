@@ -1,6 +1,6 @@
 "use client";
 
-import { FloorHeat, PersonNow, StoreConfig } from "@/lib/api";
+import { API, FloorHeat, PersonNow, StoreConfig } from "@/lib/api";
 
 // Top-down floor of a store, drawn as a blueprint: deep-blue paper, light 1 m / 5 m grid,
 // white camera marks. Two layers: people now (store-wide number, last 10 s) or the heatmap
@@ -30,12 +30,16 @@ export function heatScale(heat: FloorHeat): number {
   return v.length ? Math.max(1, v[Math.min(v.length - 1, Math.floor(0.98 * v.length))]) : 1;
 }
 
-export default function FloorMap({ config, people, trails, heat, mode = "people" }: {
+export type FloorBase = "blueprint" | "photo" | "grid";
+
+export default function FloorMap({ config, people, trails, heat, mode = "people", base = "grid", zoneNow }: {
   config: StoreConfig;
   people: PersonNow[];
   trails: Record<string, [number, number][]>;
   heat?: FloorHeat;
   mode?: "people" | "heat";
+  base?: FloorBase;                       // drawn under everything: floor plan from the cameras, or just the grid
+  zoneNow?: Record<string, number>;       // people now per zone, shown in the zone labels
 }) {
   const [x0, y0, x1, y1] = config.floor_bounds.map((v) => v * S);
   const w = x1 - x0, h = y1 - y0;
@@ -51,6 +55,12 @@ export default function FloorMap({ config, people, trails, heat, mode = "people"
     <svg viewBox={`${x0} ${y0} ${w} ${h}`} role="img"
          aria-label={mode === "heat" ? "Floor heatmap: where people spent time" : "Store floor with people now"}
          style={{ width: "100%", height: "auto", maxHeight: 640, display: "block", background: PAPER, borderRadius: 8 }}>
+      {base !== "grid" && (
+        // top-down floor from the cameras (tools/build_floor_plan.py), made over exactly floor_bounds
+        <image href={`${API}/api/stores/${encodeURIComponent(config.store_id)}/floor/${base}`}
+               x={x0} y={y0} width={w} height={h} preserveAspectRatio="none"
+               opacity={base === "photo" ? 0.55 : 0.9} />
+      )}
       {lines.map(({ k, a, major }) => (
         <line key={k} x1={a[0]} y1={a[1]} x2={a[2]} y2={a[3]} stroke={major ? LINE_5M : LINE} strokeWidth={major ? 1.4 : 0.7} />
       ))}
@@ -71,6 +81,21 @@ export default function FloorMap({ config, people, trails, heat, mode = "people"
           </g>
         </>
       )}
+      {(config.zones ?? []).map((z) => {
+        const pts = z.polygon.map(([x, y]) => `${x * S},${y * S}`).join(" ");
+        const lx = Math.min(...z.polygon.map((q) => q[0]));
+        const ly = Math.min(...z.polygon.map((q) => q[1]));
+        const n = zoneNow?.[z.name];
+        return (
+          <g key={z.name}>
+            <polygon points={pts} fill="rgba(255, 209, 102, 0.06)" stroke="#ffd166" strokeWidth={r / 4}
+                     strokeDasharray={`${r} ${r / 1.5}`} />
+            <text x={lx * S + r * 0.8} y={ly * S + font * 1.1} fontSize={font * 0.85} fill="#ffd166" fontWeight={600}>
+              {z.name.replace(/_/g, " ")}{n !== undefined ? ` · ${n}` : ""}
+            </text>
+          </g>
+        );
+      })}
       {Object.entries(config.camera_xy).map(([cam, [cx, cy]]) => (
         <g key={cam}>
           <rect x={cx * S - r * 0.7} y={cy * S - r * 0.7} width={r * 1.4} height={r * 1.4}

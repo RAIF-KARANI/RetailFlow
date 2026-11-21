@@ -354,3 +354,6 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   no place for heavy pandas work next to a real-time loop; keep TensorRT batch sizes constant.
 - **Live camera view of the store:** `run_store.py --preview` shows all 15 cameras (or one) with each box labelled
   by its store-wide number, sent back from the linking process; Stop button; "Watch live cameras" on the store page.
+- **Store layout and zones:** a top-down floor plan stitched from the 15 calibrated cameras (photo and blueprint),
+  drawn under the dashboard map, with 9 store zones in metres: people now, visits, stay times and zone-to-zone moves
+  across the whole store (store-level movement from the original plan).

@@ -88,6 +88,10 @@ Needs the SmartSpaces scene (`python tools/download_smartspaces.py`, 3.03 GB) an
 python run_store.py --store scenes/stores/smartspaces_071.json --seconds 300 --api http://127.0.0.1:8000 --preview
 ```
 
+Floor plan and zones (once): `python tools/build_floor_plan.py` then `python tools/register_store.py`. The store
+page then shows the blueprint (or floor photo) under the map, the store zones with people now, a zone table
+and zone-to-zone moves.
+
 `--preview` adds the live camera view (all cameras, store-wide numbers, heads pixelated, Stop button), linked
 from the store page as **Watch live cameras**.
 
@@ -107,7 +111,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 120 tests
+pytest -q                                                             # 121 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.

@@ -3,7 +3,204 @@
   "description": "Synthetic retail store (NVIDIA PhysicalAI-SmartSpaces, MTMC_Tracking_2024 scene_071, CC BY 4.0): 15 calibrated angled cameras over aisles, checkouts, freezers and a storage room. Synthetic people.",
   "scene_dir": "data/smartspaces/scene_071",
   "cameras": null,
-  "floor_bounds": [-19, -22, 19, 23],
+  "floor_bounds": [
+    -19,
+    -22,
+    19,
+    23
+  ],
   "frame_h": 1080,
-  "fps": 30
+  "fps": 30,
+  "zones": [
+    {
+      "name": "entrance",
+      "polygon": [
+        [
+          -3.8,
+          -22.0
+        ],
+        [
+          9.8,
+          -22.0
+        ],
+        [
+          9.8,
+          -14.4
+        ],
+        [
+          -3.8,
+          -14.4
+        ]
+      ]
+    },
+    {
+      "name": "checkouts",
+      "polygon": [
+        [
+          -5.4,
+          -14.4
+        ],
+        [
+          9.0,
+          -14.4
+        ],
+        [
+          9.0,
+          -8.8
+        ],
+        [
+          -5.4,
+          -8.8
+        ]
+      ]
+    },
+    {
+      "name": "snack_aisles",
+      "polygon": [
+        [
+          -7.8,
+          -8.8
+        ],
+        [
+          7.4,
+          -8.8
+        ],
+        [
+          7.4,
+          2.0
+        ],
+        [
+          -7.8,
+          2.0
+        ]
+      ]
+    },
+    {
+      "name": "freezers",
+      "polygon": [
+        [
+          -19.0,
+          -15.2
+        ],
+        [
+          -13.0,
+          -15.2
+        ],
+        [
+          -13.0,
+          4.4
+        ],
+        [
+          -19.0,
+          4.4
+        ]
+      ]
+    },
+    {
+      "name": "left_walkway",
+      "polygon": [
+        [
+          -13.0,
+          -16.0
+        ],
+        [
+          -7.8,
+          -16.0
+        ],
+        [
+          -7.8,
+          4.4
+        ],
+        [
+          -13.0,
+          4.4
+        ]
+      ]
+    },
+    {
+      "name": "back_right",
+      "polygon": [
+        [
+          7.4,
+          -12.4
+        ],
+        [
+          19.0,
+          -12.4
+        ],
+        [
+          19.0,
+          11.2
+        ],
+        [
+          7.4,
+          11.2
+        ]
+      ]
+    },
+    {
+      "name": "central_floor",
+      "polygon": [
+        [
+          -5.0,
+          2.0
+        ],
+        [
+          7.4,
+          2.0
+        ],
+        [
+          7.4,
+          11.2
+        ],
+        [
+          -5.0,
+          11.2
+        ]
+      ]
+    },
+    {
+      "name": "storage_room",
+      "polygon": [
+        [
+          -3.8,
+          12.0
+        ],
+        [
+          6.6,
+          12.0
+        ],
+        [
+          6.6,
+          23.0
+        ],
+        [
+          -3.8,
+          23.0
+        ]
+      ]
+    },
+    {
+      "name": "drinks_fridges",
+      "polygon": [
+        [
+          6.6,
+          11.2
+        ],
+        [
+          19.0,
+          11.2
+        ],
+        [
+          19.0,
+          23.0
+        ],
+        [
+          6.6,
+          23.0
+        ]
+      ]
+    }
+  ],
+  "zones_note": "Floor zones in metres, drawn on the top-down floor plan (tools/build_floor_plan.py). Edit with tools/setup_store_zones.py."
 }

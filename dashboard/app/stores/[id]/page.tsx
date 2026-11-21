@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import FloorMap, { HeatLegend } from "@/components/FloorMap";
+import FloorMap, { FloorBase, HeatLegend } from "@/components/FloorMap";
 import { fmtTime, get, Store, StoreRun } from "@/lib/api";
 
 // One store: all its cameras on one floor, one store-wide number per person.
@@ -15,6 +15,7 @@ export default function StorePage() {
   const [run, setRun] = useState<StoreRun | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [layer, setLayer] = useState<"people" | "heat">("people");
+  const [base, setBase] = useState<FloorBase>("blueprint");
 
   useEffect(() => {
     const load = () => get<Store>(`/api/stores/${encodeURIComponent(storeId)}`).then((s) => {
@@ -96,13 +97,24 @@ export default function StorePage() {
         <div className="panel">
           <div className="row" style={{ justifyContent: "space-between" }}>
             <h2>{layer === "heat" ? "Floor heatmap" : "Floor now"}</h2>
-            <div className="segmented" role="group" aria-label="Floor layer">
-              <button type="button" aria-pressed={layer === "people"} onClick={() => setLayer("people")}>People now</button>
-              <button type="button" aria-pressed={layer === "heat"} onClick={() => setLayer("heat")}>Heatmap</button>
+            <div className="row" style={{ gap: 8 }}>
+              <div className="segmented" role="group" aria-label="Floor layer">
+                <button type="button" aria-pressed={layer === "people"} onClick={() => setLayer("people")}>People now</button>
+                <button type="button" aria-pressed={layer === "heat"} onClick={() => setLayer("heat")}>Heatmap</button>
+              </div>
+              <div className="segmented" role="group" aria-label="Floor base">
+                {(["blueprint", "photo", "grid"] as FloorBase[]).filter((b) => b === "grid" || store.floors?.includes(b)).map((b) => (
+                  <button key={b} type="button" aria-pressed={base === b} onClick={() => setBase(b)}>
+                    {b === "blueprint" ? "Blueprint" : b === "photo" ? "Floor photo" : "Grid"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <FloorMap config={store.config} people={st.people_now ?? []} trails={st.trails ?? {}}
-                    heat={st.heatmap} mode={layer} />
+                    heat={st.heatmap} mode={layer}
+                    base={store.floors?.includes(base) ? base : "grid"}
+                    zoneNow={Object.fromEntries((st.zones ?? []).map((z) => [z.zone, z.now]))} />
           {layer === "heat" && st.heatmap ? <HeatLegend heat={st.heatmap} /> : null}
           <p className="muted">
             {layer === "heat"
@@ -111,6 +123,50 @@ export default function StorePage() {
             {" "}The number comes from linking the cameras&apos; tracks by floor position and clothing colour;
             colours are used in memory only and never stored.
           </p>
+        </div>
+      )}
+
+      {run && (st.zones?.length ?? 0) > 0 && (
+        <div className="grid two">
+          <div className="panel">
+            <h2>Store zones</h2>
+            <div className="scroll">
+              <table>
+                <thead><tr><th>Zone</th><th className="num">Now</th><th className="num">Visits</th>
+                  <th className="num">Mean stay</th><th className="num">Median stay</th></tr></thead>
+                <tbody>
+                  {st.zones!.map((z) => (
+                    <tr key={z.zone}><td>{z.zone.replace(/_/g, " ")}</td><td className="num">{z.now}</td>
+                      <td className="num">{z.visits}</td><td className="num">{z.mean_dwell_s ?? "–"} s</td>
+                      <td className="num">{z.median_dwell_s ?? "–"} s</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted">Zones drawn on the floor plan (metres). A visit counts after 2 s in the zone; leaving for
+              under 2 s does not end it. Visits are over-counted where one person has several numbers.</p>
+          </div>
+          <div className="panel">
+            <h2>Zone to zone</h2>
+            {st.zone_moves && st.zone_moves.matrix.flat().some((v) => v > 0) ? (
+              <div className="scroll">
+                <table className="matrix">
+                  <thead><tr><th>From \ to</th>{st.zone_moves.zones.map((z) => <th key={z} className="num">{z.replace(/_/g, " ")}</th>)}</tr></thead>
+                  <tbody>
+                    {st.zone_moves.zones.map((a, i) => (
+                      <tr key={a}><th scope="row">{a.replace(/_/g, " ")}</th>
+                        {st.zone_moves!.zones.map((b, j) => i === j ? <td key={b} className="num muted">–</td> : (
+                          <td key={b} className="num" style={{ background:
+                            `color-mix(in srgb, var(--accent) ${Math.round(55 * st.zone_moves!.matrix[i][j] / Math.max(1, ...st.zone_moves!.matrix.flat()))}%, transparent)` }}>
+                            {st.zone_moves!.matrix[i][j] || ""}</td>))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="muted">No moves between zones yet.</p>}
+            <p className="muted">Store-wide: each person followed from zone to zone across all cameras.</p>
+          </div>
         </div>
       )}
 
