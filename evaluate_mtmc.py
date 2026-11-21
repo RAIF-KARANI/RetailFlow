@@ -166,6 +166,8 @@ def main() -> None:
     p.add_argument("--app-thr", type=float, default=None)
     p.add_argument("--app-veto", type=float, default=None)
     p.add_argument("--long-gap-s", type=float, default=None)
+    p.add_argument("--store-linking", action="store_true",
+                   help="drop static and < 5 s tracks before linking (store_live.STORE_LINKING)")
     p.add_argument("--live-run", default=None, help="score a run_store.py output folder instead")
     args = p.parse_args()
     if args.live_run:
@@ -213,6 +215,9 @@ def main() -> None:
         cfg = replace(cfg, link_m=args.link_m)
     if args.gap_s is not None:
         cfg = replace(cfg, gap_s=args.gap_s)
+    if args.store_linking:
+        from retailflow.store_live import STORE_LINKING
+        cfg = replace(cfg, drop_static=STORE_LINKING.drop_static, min_track_s=STORE_LINKING.min_track_s)
     for k in ("app_thr", "app_veto", "long_gap_s"):
         if getattr(args, k) is not None:
             cfg = replace(cfg, **{k: getattr(args, k)})

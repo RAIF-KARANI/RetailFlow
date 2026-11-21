@@ -26,6 +26,13 @@ retailflow/appearance.py, kept in memory only) adds three things:
   (`app_veto`), which stops an ID switch from merging two people.
 Appearance links are added after all position links, and only between groups
 whose average colours still match.
+
+4. **Group consolidation** (`group_link_m`): after steps 2-3, whole groups are compared by
+   their floor path (per time bin, the median of all their cameras' feet), which is steadier
+   than one track. Two groups on the floor at the same place and time (median distance <=
+   `group_link_m` over >= `group_min_common` shared bins) are joined, closest first, unless
+   their colours clearly differ or one camera would then hold two of them at once. This
+   absorbs the short fragments that make one person look like many (tools/diagnose_mtmc.py).
 """
 
 from __future__ import annotations
@@ -52,6 +59,12 @@ class MTMCConfig:
     app_veto: float | None = 0.6 # position link refused when colours differ more than this
     app_link_m: float = 2.0      # overlap link allowed up to this far when colours match
     long_gap_s: float = 30.0     # hand-off allowed up to this gap when colours match
+    # step 4, group consolidation: groups (not single tracks) in the same place at the same time
+    group_link_m: float | None = None   # median distance of the groups' floor paths; None = off
+    group_min_common: int = 3           # shared time bins (of sample_every frames) needed
+    # step 0, before linking: tracks that never become a person
+    drop_static: bool = False    # never-moving tracks (static_filter.py: >= 10 s, moves < half its height)
+    min_track_s: float = 0.0     # tracks seen for less than this many seconds
 
 
 def floor_points(tracks: pd.DataFrame, H: np.ndarray, frame_h: int, cfg: MTMCConfig) -> pd.DataFrame:
@@ -122,6 +135,7 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
 
     Returns one row per tracklet: camera, track_id, global_id, start, end, n.
     """
+    cams = drop_tracks(cams, fps, cfg)
     rows = []
     for cam, t in cams.items():
         rows.append(t.assign(camera=cam))
@@ -218,6 +232,10 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
             used_end.add(a)
             used_start.add(b)
 
+    # ---- 4. group consolidation: same place, same time, whole groups
+    if cfg.group_link_m is not None:
+        _consolidate(allt, groups, info.index, cfg, colours_differ)
+
     # ---- numbering
     roots = {k: groups.find(k) for k in info.index}
     first: dict = {}
@@ -229,6 +247,67 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
     out["track_id"] = [k[1] for k in out.key]
     out["global_id"] = [number[roots[k]] for k in out.key]
     return out[["camera", "track_id", "global_id", "start", "end", "n"]]
+
+
+def drop_tracks(cams: dict, fps: float, cfg: MTMCConfig) -> dict:
+    """Step 0: leave out tracks that should never become a person (they get no store-wide ID).
+
+    Static tracks are things the detector takes for people (signs, displays: camera_0648 of the
+    synthetic store has several at the top edge of its image); very short tracks are mostly
+    false detections and stray fragments (tools/diagnose_mtmc.py).
+    """
+    if not cfg.drop_static and cfg.min_track_s <= 0:
+        return cams
+    from retailflow.static_filter import MAX_MOVE_FRAC, MIN_SECONDS
+    out = {}
+    for cam, t in cams.items():
+        drop = set()
+        g = t.assign(fx=(t.x1 + t.x2) / 2, h=t.y2 - t.y1).groupby("track_id")
+        span_s = (g.frame.max() - g.frame.min() + 1) / fps          # time span, not frame count:
+        if cfg.min_track_s > 0:                                       # a live run skips frames
+            drop |= set(span_s[span_s < cfg.min_track_s].index)
+        if cfg.drop_static:
+            # same rule as static_filter.is_static (>= 10 s, feet move < half the box height),
+            # judged on the time span so it also works when only some frames are analysed
+            move = pd.concat([g.fx.agg(np.ptp), g.y2.agg(np.ptp)], axis=1).max(axis=1)
+            still = (span_s >= MIN_SECONDS) & (move <= MAX_MOVE_FRAC * g.h.median())
+            drop |= set(still[still].index)
+        out[cam] = t[~t.track_id.isin(drop)] if drop else t
+    return {c: t for c, t in out.items() if len(t)}
+
+
+def _consolidate(allt: pd.DataFrame, groups: "_Groups", keys, cfg: MTMCConfig, colours_differ) -> None:
+    """Join groups whose floor paths coincide in time (see step 4 in the module notes)."""
+    for _ in range(2):                                   # a second pass catches chains A-B-C
+        gid = {k: groups.find(k) for k in keys}
+        u = allt[allt.usable].assign(group=allt.key.map(gid), bin=allt.frame // cfg.sample_every)
+        path = u.groupby(["bin", "group"])[["xw", "yw"]].median().reset_index()
+        dist: dict = {}
+        for _, g in path.groupby("bin"):
+            if len(g) < 2:
+                continue
+            xy = g[["xw", "yw"]].to_numpy()
+            grp = g.group.tolist()
+            d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1])
+            ii, jj = np.where(np.triu(d <= 3 * cfg.group_link_m, 1))
+            for i, j in zip(ii, jj):
+                dist.setdefault((grp[i], grp[j]), []).append(d[i, j])
+        bins = path.groupby("group").bin.agg(lambda b: set(b.tolist()))
+        cand = []
+        for (a, b), ds in dist.items():
+            n = len(bins[a] & bins[b])
+            if n < cfg.group_min_common:
+                continue
+            far = n - len(ds)                            # shared bins where they were far apart
+            med = np.median(np.r_[ds, np.full(far, np.inf)]) if far else np.median(ds)
+            if med <= cfg.group_link_m:
+                cand.append((med, a, b))
+        merged = 0
+        for _, a, b in sorted(cand, key=lambda c: c[0]):
+            if not colours_differ(a, b) and groups.merge(a, b):
+                merged += 1
+        if not merged:
+            break
 
 
 def _shared_frames(u: pd.DataFrame, pairs) -> dict:

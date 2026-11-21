@@ -28,7 +28,7 @@ import pandas as pd
 
 from evaluate_mtmc import appearance_for, load_gt, load_tracks
 from retailflow.mtmc import MTMCConfig, link
-from retailflow.store_live import load_store, store_zone_analysis
+from retailflow.store_live import STORE_LINKING, load_store, store_zone_analysis
 
 
 def true_positions(scene: Path, fps: float) -> pd.DataFrame:
@@ -55,10 +55,10 @@ def live_positions(run: Path, store) -> pd.DataFrame:
     return allr.groupby(["sec", "person"])[["xw", "yw"]].median().reset_index()
 
 
-def offline_positions(tracks: Path, store, appearance: bool) -> pd.DataFrame:
+def offline_positions(tracks: Path, store, appearance: bool, cfg: MTMCConfig = STORE_LINKING) -> pd.DataFrame:
     cams, _, fps = load_tracks(store.scene_dir, tracks, MTMCConfig())
     app = appearance_for(store.scene_dir, cams) if appearance else None     # in memory only
-    links = link(cams, fps, MTMCConfig(), appearance=app)
+    links = link(cams, fps, cfg, appearance=app)
     allr = pd.concat([t.assign(camera=c) for c, t in cams.items()], ignore_index=True)
     allr = allr.merge(links[["camera", "track_id", "global_id"]], on=["camera", "track_id"]).rename(
         columns={"global_id": "person"})
@@ -107,6 +107,8 @@ def main() -> None:
     src.add_argument("--live-run", help="run_store.py output folder")
     src.add_argument("--offline", help="tracks folder (tools/track_multicam.py); linked here")
     p.add_argument("--no-colour", action="store_true", help="offline: link on floor position only")
+    p.add_argument("--plain-linking", action="store_true",
+                   help="offline: keep static and short tracks (the linker defaults, before STORE_LINKING)")
     p.add_argument("--from-s", type=float, default=120.0)
     p.add_argument("--to-s", type=float, default=None)
     args = p.parse_args()
@@ -118,8 +120,9 @@ def main() -> None:
         pred_pos, out = live_positions(Path(args.live_run), store), Path(args.live_run)
         name = "store_zone_score.json"
     else:
-        pred_pos, out = offline_positions(Path(args.offline), store, not args.no_colour), Path(args.offline).parent
-        name = f"store_zone_score_offline{'_nocolour' if args.no_colour else ''}.json"
+        cfg = MTMCConfig() if args.plain_linking else STORE_LINKING
+        pred_pos, out = offline_positions(Path(args.offline), store, not args.no_colour, cfg), Path(args.offline).parent
+        name = f"store_zone_score_offline{'_nocolour' if args.no_colour else ''}{'_plain' if args.plain_linking else ''}.json"
     hi = int(args.to_s) if args.to_s else int(pred_pos.sec.max()) + 1
     r = score(true_pos, pred_pos, zones, int(args.from_s), hi)
     (out / name).write_text(json.dumps(r, indent=2))

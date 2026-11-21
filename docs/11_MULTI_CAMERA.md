@@ -256,6 +256,35 @@ so the true people (one ID across cameras, median position once per second) go t
   and stay times per zone should not be quoted until the cross-camera IDs improve.
 - The move matrix is closer than visits (30% offline) because a split rarely changes which zone comes next.
 
+**Fixing the split IDs** (`tools/diagnose_mtmc.py`, dev minutes 0–2 only): the store-wide IDs were mostly clean
+(86% of an ID's boxes belong to one person) but each person owned about 6 IDs, and 61–71 of ~250 IDs matched no
+one. Most of those "ghosts" lasted under 2 s; the longest were small boxes at the top edge of camera_0648 that
+never move (signs or displays taken for people). Tried, measured on dev:
+- joining whole groups by their combined floor path (`group_link_m`): 250 → 227 IDs, visits barely changed; off;
+- a 3 s instead of 1 s tracker buffer: 971 → 958 camera tracks, no change; dropped;
+- **leaving out tracks that never move (≥ 10 s, judged on time span) and tracks shorter than 5 s** before
+  linking (`store_live.STORE_LINKING`): chosen from 0 / 1 / 2 / 3 / 4 / 5 s. Dev: visits 413 → 261 (193 true),
+  time in zones 31.7% → 16.9%, moves 39.0% → 19.1%; global IDF1 0.509 → 0.500.
+
+Then scored **once** on the test minutes 2–7 (offline, every frame, floor + colour):
+
+| Test minutes 2–7 | Before | **Store linking** |
+|---|---|---|
+| Visits (480 true), WAPE | 940, 95.8% | **622, 29.6%** |
+| Time in zones, WAPE | 24.8% | **12.4%** |
+| People in a zone, error per second | 0.85 | **0.59** |
+| Zone-to-zone moves (382 true), WAPE | 30.4% | **20.2%** (359 found) |
+| Global IDF1 (precision / recall) | 0.369 (0.89 / 0.93) | **0.436** (0.96 / 0.83) |
+| Store-wide IDs | 571 | 200 |
+
+The cost: people seen for less than 5 s are not counted at all (recall 0.93 → 0.83), and in the live store a
+new arrival gets a number about 5 s later. Mean stays are now close in most zones (central floor 12.1 s vs 12.6 s
+true, left walkway 13.3 vs 14.0, storage room 16.9 vs 19.7); the freezers zone is still far off (65 visits vs 26),
+so visits there should not be quoted yet.
+Live (15 cameras, 5.0 analyses per camera per second, same minutes 2–7): visits 1,091 → **757** (WAPE 127% → 57.7%),
+time in zones 42.9% → **32.7%**, people per zone 1.40 → **1.13**, moves 42.7% → **25.4%**; global IDF1 0.294 → 0.284.
+A first live run at the same time as another heavy job reached only 0.5 analyses per camera per second and is not used.
+
 **What this meant before the batch engine:** the live store view worked end to end, but at 3–4 analyses per second per camera the
 per-camera tracks break more, so store-wide IDs are clearly worse than offline, and "visitors so far"
 over-counts heavily (939 store-wide numbers seen ≥ 2 s in 7 minutes for 31 people). Re-linking also

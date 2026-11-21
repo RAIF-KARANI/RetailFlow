@@ -21,7 +21,7 @@ and can be reproduced with the commands in [`docs/12_DEMO.md`](docs/12_DEMO.md).
 | Privacy | Anonymous events only, `--blur-heads`, ReID only in memory, people-free heatmap backgrounds. | [doc 06](docs/06_STAFF_AND_PRIVACY.md) |
 | Backend + dashboard | FastAPI + PostgreSQL + Next.js, Docker Compose, live sessions. | [doc 07](docs/07_BACKEND_DASHBOARD.md) |
 | RTSP, multiple streams, ONNX/TensorRT | FFmpeg + MediaMTX simulated cameras, `run_multi.py`, TensorRT FP16. | **4** small / **2** full-HD / **1** crowd camera in real time on the laptop ([doc 08](docs/08_STREAMING_PERFORMANCE.md)) |
-| Multi-camera | Both CAVIAR views synced from the burned-in clock; two-camera door fusion; one ID per person across 15 calibrated cameras (synthetic store). | 72,518/72,518 frames synced; fusion did **not** beat one good camera; cross-camera IDF1 0.110 → 0.281 (floor linking) → **0.369** (+ colour) ([doc 11](docs/11_MULTI_CAMERA.md)) |
+| Multi-camera | Both CAVIAR views synced from the burned-in clock; two-camera door fusion; one ID per person across 15 calibrated cameras (synthetic store). | 72,518/72,518 frames synced; fusion did **not** beat one good camera; cross-camera IDF1 0.110 → 0.281 (floor linking) → 0.369 (+ colour) → **0.436** (+ ghost/short-track filter) ([doc 11](docs/11_MULTI_CAMERA.md)) |
 
 ## Headline result: counting before and after
 
@@ -51,8 +51,8 @@ What is **not** solved, in plain words:
 - **Cross-camera identities** (synthetic store, 15 cameras): floor linking + colour matching lift global IDF1 from
   0.110 to 0.369, but people are still split into many IDs (169 seen ≥ 10 s for 31 true); a steadier per-camera
   tracker and a learned re-identification model are the next steps.
-- **Store zones** are scored against ground truth: people per zone are close (error 0.85 per second offline) and
-  zone-to-zone moves are 30% off, but visit counts are about 2× too high because of split IDs.
+- **Store zones** are scored against ground truth (test minutes, offline): people per zone 0.59 error per second,
+  time in zones 12.4% off, moves 20.2%, visits 29.6% (57.7% live). People seen for under 5 s are not counted.
 - **Staff filtering** depends on the tracker keeping one ID. No public dataset labels staff, so it is not scored.
 
 ## Quick start (Windows, PowerShell)
@@ -82,7 +82,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (123 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (124 tests; the API integration test runs when the stack is up).
 
 ## How it works
 
@@ -131,7 +131,7 @@ scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             123 tests                                     docs/          everything above
+tests/             124 tests                                     docs/          everything above
 ```
 
 ## Data acknowledgements and licences

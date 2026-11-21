@@ -289,3 +289,7 @@ are the main loss.
 **Store zones** (synthetic store, 9 zones, test minutes 2–7, doc 11 §8): people-in-zone error 0.85 per second offline
 (1.40 live), time in zones 24.8% (42.9%), zone-to-zone moves 30.4% (42.7%); visit counts about 2× too high because of
 split IDs.
+
+**After fixing split IDs** (static and < 5 s tracks get no store-wide ID; chosen on dev): test minutes 2–7 offline,
+visits 95.8% → 29.6% WAPE, time in zones 24.8% → 12.4%, moves 30.4% → 20.2%, global IDF1 0.369 → 0.436; live, visits
+127% → 57.7%, time 42.9% → 32.7%, moves 42.7% → 25.4% (doc 11 §8).

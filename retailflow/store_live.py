@@ -35,6 +35,10 @@ MIN_SEEN_S = 2.0        # a person counts as a visitor after this many seconds s
 TRAIL_S = 10            # trail length shown on the floor map
 WINDOW_S = 120          # only tracks seen in the last WINDOW_S are re-linked; older people keep their number
 HEAT_CELL_M = 0.5       # floor heatmap cell size (metres)
+# Linking settings for a store: never-moving tracks and tracks shorter than 5 s get no
+# store-wide ID (chosen on dev minutes 0-2 of the synthetic store: zone visit error
+# 114% -> 35%, time in zones 31.7% -> 16.9%; global IDF1 0.509 -> 0.500; docs/11 section 8).
+STORE_LINKING = MTMCConfig(drop_static=True, min_track_s=5.0)
 
 
 @dataclass
@@ -84,7 +88,7 @@ def load_store(path: str | Path) -> StoreConfig:
 class StoreLinker:
     """Collects live tracks of all cameras and keeps stable store-wide person numbers."""
 
-    def __init__(self, store: StoreConfig, cfg: MTMCConfig = MTMCConfig(), appearance: bool = True,
+    def __init__(self, store: StoreConfig, cfg: MTMCConfig = STORE_LINKING, appearance: bool = True,
                  window_s: float = WINDOW_S):
         self.store, self.cfg, self.use_app, self.window_s = store, cfg, appearance, window_s
         self.rows: dict[str, list] = {c: [] for c in store.cameras}

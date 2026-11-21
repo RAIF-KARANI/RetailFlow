@@ -56,6 +56,7 @@ def main() -> None:
     p.add_argument("--seconds", type=float, default=None, help="only the first N seconds of each camera")
     p.add_argument("--profile", default="standard")
     p.add_argument("--cams", nargs="*", default=None, help="only these camera folders")
+    p.add_argument("--tracker", default=None, help="override the profile's tracker (name or .yaml)")
     args = p.parse_args()
 
     scene = Path(args.scene_dir)
@@ -75,7 +76,7 @@ def main() -> None:
                 print(f"  {v.parent.name}: already tracked, skipped")
                 continue
         # A fresh tracker per camera: track IDs are per camera, like a real deployment.
-        tracker = PersonTracker(prof.weights("auto"), prof.tracker, prof.imgsz, prof.conf, 0)
+        tracker = PersonTracker(prof.weights("auto"), args.tracker or prof.tracker, prof.imgsz, prof.conf, 0)
         s = track_camera(v, cam_out, tracker, want)
         s["complete"] = want is None
         (cam_out / "summary.json").write_text(json.dumps(s, indent=2))

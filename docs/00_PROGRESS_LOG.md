@@ -360,3 +360,7 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 - **Store zones scored:** ground-truth floor positions through the same zone code. Offline: 0.85 people error per
   zone per second, time in zones 24.8%, moves 30.4%; live 1.40 / 42.9% / 42.7%; visits about 2× too high (split IDs).
   **Learned:** occupancy and time-in-zone survive ID splits; visit counts do not.
+- **Split IDs fixed (partly):** diagnosis showed ~6 IDs per person plus ghost IDs (camera_0648 signs, sub-2 s
+  fragments). Leaving out never-moving and < 5 s tracks: test visits 95.8% → 29.6% WAPE offline (127% → 57.7% live),
+  global IDF1 0.369 → 0.436. A longer tracker buffer and group consolidation did not help. **Learned:** count IDs a
+  person owns, not IDs that touch them; the static rule must use time, not frame counts, when frames are skipped.

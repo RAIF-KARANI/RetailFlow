@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 
 from retailflow.detector import TrackedPerson
-from retailflow.store_live import StoreConfig, StoreLinker, camera_floor_position
+from retailflow.mtmc import MTMCConfig
+from retailflow.store_live import STORE_LINKING, StoreConfig, StoreLinker, camera_floor_position
 
 FPS = 30.0
 H = np.array([[100.0, 0, 960], [0, 100.0, 540], [0, 0, 1]])     # 1 m = 100 px around the image centre
@@ -33,7 +34,7 @@ def walker(x0, y0, vx):
 
 
 def test_same_person_in_two_cameras_gets_one_number_that_stays():
-    lk = StoreLinker(store(), appearance=False)
+    lk = StoreLinker(store(), MTMCConfig(), appearance=False)      # numbering only: no track filtering
     xa, ya = walker(-3, 0, 0.5)
     xb, yb = walker(3, 2, -0.5)
     feed(lk, range(0, 150, 6), [(1, xa, ya), (2, xb, yb)], [(7, xa, ya), (8, xb, yb)])
@@ -46,7 +47,7 @@ def test_same_person_in_two_cameras_gets_one_number_that_stays():
 
 
 def test_old_tracks_keep_their_number_outside_the_window():
-    lk = StoreLinker(store(), appearance=False, window_s=5)
+    lk = StoreLinker(store(), MTMCConfig(), appearance=False, window_s=5)
     x, y = walker(0, 0, 0.0)
     feed(lk, range(0, 60, 6), [(1, x, y)], [(4, x, y)])
     first = {(r.camera, r.track_id): r.person for r in lk.relink().itertuples()}
@@ -113,3 +114,15 @@ def test_store_zones_count_visits_dwell_and_moves():
     assert 8 <= z["a"]["mean_dwell_s"] <= 11
     assert z["b"]["now"] == 1 and z["a"]["now"] == 0
     assert s["zone_moves"]["matrix"] == [[0, 1], [0, 0]]
+
+
+def test_store_linking_drops_short_and_never_moving_tracks():
+    lk = StoreLinker(store(), STORE_LINKING, appearance=False)
+    x, y = walker(-3, 0, 0.5)
+    for f in range(0, 600, 6):                                         # 20 s
+        people = [box(1, x(f), y(f)), box(2, 4.0, 4.0)]                # a walker and a sign that never moves
+        if f < 60:
+            people.append(box(3, -6.0, -6.0))                          # a 2 s ghost
+        lk.add("camera_a", f, people)
+    kept = set(lk.relink().track_id)
+    assert kept == {1}

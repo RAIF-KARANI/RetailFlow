@@ -241,3 +241,13 @@ Format: **problem → cause → fix**. Newest at the bottom.
 ### Floor plan: six cameras projected nothing
 - **Cause:** "in front of the camera" was tested as z > 0, but some homographies are scaled by a negative number.
 - **Fix:** take the sign from a floor point the camera surely sees (bottom-centre of its image).
+
+### Static-object rule missed a never-moving "person" in the live store
+- **Cause:** `static_filter.is_static` needs 10 s worth of *frames*; the live store analyses about 5 of every 30
+  frames, so a sign had to be seen for about a minute.
+- **Fix:** the store linking judges static tracks on their time span (`mtmc.drop_tracks`).
+
+### A live store run reached only 0.5 analyses per camera per second
+- **Cause:** it ran at the same time as another heavy job; the detector benchmark right after was normal (140 ms
+  per 15 frames).
+- **Fix:** rerun alone (5.0 per second); measure live runs with nothing else running.
