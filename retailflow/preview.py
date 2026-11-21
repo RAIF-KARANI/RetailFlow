@@ -36,19 +36,22 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
           background:#3a1414; color:#fdd; cursor:pointer; }}
  button:disabled {{ opacity:.6; cursor:default; }}
  #msg {{ color:#fc6; }}
+ select {{ font:inherit; padding:5px 8px; border-radius:6px; background:#222; color:#eee; border:1px solid #555; }}
  .dot {{ width:9px; height:9px; border-radius:50%; background:#e33; }}
  main {{ padding:0 16px 16px; }}
  img {{ width:100%; max-width:1280px; height:auto; display:block; background:#000; }}
  small {{ color:#aaa; }}
 </style></head><body>
 <header><span class="dot" id="dot"></span><b>{cam}</b><small>live pipeline output, {fps} fps preview, video time on the frame</small>
-<span id="msg"></span><button id="stop" title="End this run now; results and the dashboard summary are saved">&#9632; Stop run</button></header>
+{picker}<span id="msg"></span><button id="stop" title="End this run now; results and the dashboard summary are saved">&#9632; Stop run</button></header>
 <main><img id="v" src="/stream" alt="annotated live camera (waiting for the pipeline)"></main>
 <script>
  const v = document.getElementById("v"), b = document.getElementById("stop"), m = document.getElementById("msg");
  let stopped = false;
  // Reconnect when the stream ends or is not up yet (model still loading), unless stopped.
  v.onerror = () => {{ if (!stopped) setTimeout(() => {{ v.src = "/stream?" + Date.now(); }}, 1000); }};
+ const f = document.getElementById("focus");
+ if (f) f.onchange = () => fetch("/focus?v=" + encodeURIComponent(f.value));
  b.onclick = async () => {{
    if (!confirm("Stop this run? Counts so far are kept and the session is closed on the dashboard.")) return;
    b.disabled = true; m.textContent = "Stopping...";
@@ -67,7 +70,10 @@ class PreviewServer:
     """MJPEG server fed with the pipeline's newest annotated frame."""
 
     def __init__(self, camera_id: str, port: int = 8090, max_fps: float = 10.0,
-                 width: int = 960, quality: int = 75, host: str = "127.0.0.1"):
+                 width: int = 960, quality: int = 75, host: str = "127.0.0.1",
+                 views: list[str] | None = None):
+        """`views`: optional choices for the page's picker (e.g. "all" + camera names, run_store.py);
+        the choice is in `self.focus` for the pipeline to draw."""
         self.camera_id = camera_id
         self.max_fps = max_fps
         self.width = width
@@ -80,6 +86,8 @@ class PreviewServer:
         self._last_pub = 0.0
         self._closed = False
         self.stop_requested = False        # set by the page's Stop button (POST /stop)
+        self.views = list(views or [])
+        self.focus = self.views[0] if self.views else None
         server = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -88,8 +96,24 @@ class PreviewServer:
 
             def do_GET(self):
                 path = self.path.split("?")[0]
+                if path == "/focus":
+                    v = self.path.split("v=", 1)[-1] if "v=" in self.path else ""
+                    from urllib.parse import unquote
+                    v = unquote(v)
+                    if v in server.views:
+                        server.focus = v
+                        server._last_pub = 0.0          # next frame right away
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 if path in ("/", "/index.html"):
-                    body = PAGE.format(cam=server.camera_id, fps=int(server.max_fps)).encode()
+                    picker = ""
+                    if server.views:
+                        opts = "".join(f'<option value="{v}"{" selected" if v == server.focus else ""}>'
+                                       f'{"All cameras" if v == "all" else v.replace("camera_", "Camera ")}</option>'
+                                       for v in server.views)
+                        picker = f'<select id="focus" aria-label="Camera">{opts}</select>'
+                    body = PAGE.format(cam=server.camera_id, fps=int(server.max_fps), picker=picker).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))

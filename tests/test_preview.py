@@ -81,3 +81,17 @@ def test_stop_needs_post_with_header():
         assert "Stop run" in html
     finally:
         srv.close()
+
+
+def test_view_picker_sets_focus_only_to_known_views():
+    srv = PreviewServer("store_x", port=0, views=["all", "camera_a", "camera_b"])
+    try:
+        html = urllib.request.urlopen(srv.url, timeout=5).read().decode()
+        assert 'id="focus"' in html and ">Camera a<" in html and 'value="camera_b"' in html
+        assert srv.focus == "all"
+        urllib.request.urlopen(srv.url + "focus?v=camera_b", timeout=5)
+        assert srv.focus == "camera_b"
+        urllib.request.urlopen(srv.url + "focus?v=../etc", timeout=5)     # unknown: ignored
+        assert srv.focus == "camera_b"
+    finally:
+        srv.close()

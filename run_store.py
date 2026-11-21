@@ -17,6 +17,10 @@ What it does:
      heatmap) to the API / dashboard. A thread was tried first: its pandas work shared
      the GIL with detection and starved it. Detection never waits for linking.
 
+With --preview, http://127.0.0.1:8090 shows the cameras live (all as a mosaic, or one),
+each box labelled with the person's store-wide number, heads pixelated, plus a Stop button;
+the store page on the dashboard links to it.
+
 No RTSP here: re-encoding 15 full-HD streams would need the CPU the pipeline needs
 (single cameras over RTSP: run.py / demo.ps1). Outputs in outputs/store/<store>/<tag>/:
 per-camera tracks.csv (video frame numbers, so they can be scored), links.csv
@@ -29,6 +33,7 @@ import argparse
 import csv
 import json
 import multiprocessing as mp
+import queue
 import time
 from pathlib import Path
 
@@ -40,6 +45,7 @@ from retailflow.profiles import get_profile
 from retailflow.sender import StoreApiClient
 from retailflow.sources import LatestFrameReader
 from retailflow.store_live import StoreLinker, link_worker, load_store, take_delta
+from retailflow.store_preview import mosaic, single
 
 
 def main() -> None:
@@ -53,6 +59,9 @@ def main() -> None:
     p.add_argument("--hw-decode", action="store_true", help="decode videos on the GPU (default: CPU)")
     p.add_argument("--api", default=None, metavar="URL")
     p.add_argument("--profile", default="standard")
+    p.add_argument("--preview", nargs="?", const=8090, type=int, default=None, metavar="PORT",
+                   help="live camera view at http://127.0.0.1:PORT/ (default 8090)")
+    p.add_argument("--no-blur", action="store_true", help="do not pixelate heads in the preview")
     p.add_argument("--batch", type=int, default=None,
                    help="images per detector call (default: 16 if models/yolo26m_960_b16.engine exists, else 1)")
     p.add_argument("--tag", default=None)
@@ -78,9 +87,17 @@ def main() -> None:
         mct.model.predict([blank] * min(batch, len(cams)) if batch > 1 else blank,
                           imgsz=prof.imgsz, device=0, verbose=False)
 
+    preview = None
+    if args.preview is not None:
+        from retailflow.preview import PreviewServer
+        # 1920 px wide: the mosaic has 4 tiles across, halving it would make boxes vanish.
+        preview = PreviewServer(store.store_id, port=args.preview, views=["all", *cams], width=1920)
+        print(f"Live cameras: {preview.url}", flush=True)
     run_info = {"cameras": len(cams), "batch": batch, "decode": "gpu" if args.hw_decode else "cpu", "analysis_fps_target": args.analysis_fps, "model": weights,
                 "tracker": prof.tracker, "imgsz": prof.imgsz, "colour": not args.no_colour,
                 "source": "video files replayed at real-time speed"}
+    if preview:
+        run_info["preview_url"] = preview.url
     api = StoreApiClient(args.api, store.to_api(), run_info) if args.api else None
     if api:
         print(f"API store run {api.run_id}", flush=True)
@@ -117,11 +134,19 @@ def main() -> None:
                                inbox, outbox))
     worker.start()
     sent: dict = {}
+    numbers: dict = {}                                 # (camera, track) -> store-wide person, for the preview
+    last_img: dict = {}
+    last_people: dict = {}
+    preview_frames = 0
+    stopped_by_user = False
     t0 = time.perf_counter()
     next_link = t0 + args.link_every
     result = None
     try:
         while not all(r.finished for r in readers.values()):
+            if preview is not None and preview.stop_requested:
+                stopped_by_user = True                   # Stop button on the preview page
+                break
             now = time.perf_counter()
             frames, index = {}, {}
             if batch > 1:
@@ -155,12 +180,35 @@ def main() -> None:
                     writers[c].writerow([index[c], q.track_id, f"{q.x1:.1f}", f"{q.y1:.1f}", f"{q.x2:.1f}",
                                          f"{q.y2:.1f}", f"{q.conf:.3f}"])
                 linker.add(c, index[c], people, frames[c])
+                last_img[c], last_people[c] = frames[c], people
+            if preview is not None:
+                while True:                              # newest store-wide numbers, without waiting
+                    try:
+                        kind, payload = outbox.get_nowait()
+                    except queue.Empty:
+                        break
+                    if kind == "numbers":
+                        numbers = payload
+                if preview.wants_frame():
+                    t_s = max(index.values()) / store.fps
+                    blur = not args.no_blur
+                    if preview.focus in last_img:
+                        view = single(last_img[preview.focus], last_people[preview.focus], numbers,
+                                      preview.focus, t_s, blur)
+                    else:
+                        view = mosaic(last_img, last_people, numbers, cams, t_s, blur=blur)
+                    preview.publish(view)
+                    preview_frames += 1
             if time.perf_counter() >= next_link:          # hand the new tracks to the linking process
                 inbox.put(("delta", *take_delta(linker, sent)))
                 next_link += args.link_every
         wall = time.perf_counter() - t0
         inbox.put(("final", *take_delta(linker, sent)))
-        result = outbox.get(timeout=600)
+        while True:                                      # skip "numbers" messages until the final one
+            kind, payload = outbox.get(timeout=600)
+            if kind == "final":
+                result = payload
+                break
     except BaseException as e:
         # Close the run on the dashboard even when it fails (else it stays "live" forever).
         if api:
@@ -172,6 +220,8 @@ def main() -> None:
     finally:
         if worker.is_alive():
             worker.terminate()
+        if preview is not None:
+            preview.close()
         for r in readers.values():
             r.stop()
         for f in files.values():
@@ -187,6 +237,7 @@ def main() -> None:
                "link_ms_mean": round(float(np.mean(link_ms)), 1) if link_ms else None,
                "link_ms_max": round(float(np.max(link_ms)), 1) if link_ms else None,
                "people_now_end": len(state["people_now"]), "unique_people": state["unique_people"],
+               "preview_frames": preview_frames, "stopped_by_user": stopped_by_user,
                "per_camera": per_cam}
     for c in cams:
         (out / c / "summary.json").write_text(json.dumps({"frames": max_frames, "fps": store.fps,

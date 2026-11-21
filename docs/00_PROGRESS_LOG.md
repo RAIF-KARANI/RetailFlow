@@ -352,3 +352,5 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   raised the live rate from 3.3 to 4.88 analyses per camera per second and live global IDF1 (minutes 2–7)
   from 0.197 to 0.294. The store page has a blueprint-style floor heatmap. **Learned:** a Python thread is
   no place for heavy pandas work next to a real-time loop; keep TensorRT batch sizes constant.
+- **Live camera view of the store:** `run_store.py --preview` shows all 15 cameras (or one) with each box labelled
+  by its store-wide number, sent back from the linking process; Stop button; "Watch live cameras" on the store page.

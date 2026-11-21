@@ -219,6 +219,13 @@ person per second (the median of the cameras that see their feet), drawn as a bl
 where people walk; the totals are inflated where one person has several numbers (298 person-minutes in 7
 minutes, while 31 people can give at most 217).
 
+**Live camera view** (`run_store.py --preview`): http://127.0.0.1:8090 shows all cameras as a mosaic (or one camera
+at full size, picked in the page), each box labelled with the person's **store-wide number** and coloured by it,
+so the same person can be followed from camera to camera; "?" marks a track the linker has not numbered yet
+(it is numbered within one 3 s re-link). The numbers come back from the linking process. Heads are pixelated
+(`--no-blur` to switch off), frames are drawn only while the page is open, and the page has the Stop button;
+the store page on the dashboard shows "Watch live cameras" while such a run is live.
+
 **What this meant before the batch engine:** the live store view worked end to end, but at 3–4 analyses per second per camera the
 per-camera tracks break more, so store-wide IDs are clearly worse than offline, and "visitors so far"
 over-counts heavily (939 store-wide numbers seen ≥ 2 s in 7 minutes for 31 people). Re-linking also

@@ -307,7 +307,11 @@ def ingest(lk: "StoreLinker", delta: dict, desc: dict, now: int) -> None:
 
 def link_worker(store_path: str, cameras: list[str], appearance: bool, api_url: str | None,
                 run_id: str | None, inbox, outbox) -> None:
-    """Process: receive deltas, re-link, post the store state; on 'final' return links and state."""
+    """Process: receive deltas, re-link, post the store state; on 'final' return links and state.
+
+    After every re-link it also sends ("numbers", {(camera, track): person}) for tracks seen in
+    the last 30 s, so the detection process can label boxes in the live camera preview.
+    """
     import queue
     import time
 
@@ -334,9 +338,11 @@ def link_worker(store_path: str, cameras: list[str], appearance: bool, api_url: 
         state = lk.state(links)
         link_ms.append((time.perf_counter() - t) * 1000)
         if final:
-            outbox.put({"state": state, "links": links[["camera", "track_id", "person", "start", "end", "n"]],
-                        "link_ms": link_ms})
+            outbox.put(("final", {"state": state, "links": links[["camera", "track_id", "person", "start", "end", "n"]],
+                                  "link_ms": link_ms}))
             return
+        recent = links[links.end >= lk.now_frame - 30 * store.fps]
+        outbox.put(("numbers", {(r.camera, int(r.track_id)): int(r.person) for r in recent.itertuples()}))
         if api:
             api.state(state)
         print(f"t={state['t']:6.1f}s  people now {len(state['people_now']):3d}  "

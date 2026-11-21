@@ -61,6 +61,13 @@ export default function StorePage() {
             ))}
           </select>
           {run && !run.finished && <span className="muted">live · refreshing every 2 s</span>}
+          {run && !run.finished && typeof run.run_info.preview_url === "string" && (
+            // run_store.py --preview: all cameras live, boxes with store-wide numbers, Stop button.
+            <a className="watch" href={run.run_info.preview_url} target="_blank" rel="noopener noreferrer"
+               aria-label="Watch live cameras" title="All cameras live, each person with their store-wide number">
+              &#9654; Watch live cameras
+            </a>
+          )}
         </div>
       </div>
       {err && <p className="error">{err}</p>}
