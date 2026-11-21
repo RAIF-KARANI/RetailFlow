@@ -21,7 +21,7 @@ and can be reproduced with the commands in [`docs/12_DEMO.md`](docs/12_DEMO.md).
 | Privacy | Anonymous events only, `--blur-heads`, ReID only in memory, people-free heatmap backgrounds. | [doc 06](docs/06_STAFF_AND_PRIVACY.md) |
 | Backend + dashboard | FastAPI + PostgreSQL + Next.js, Docker Compose, live sessions. | [doc 07](docs/07_BACKEND_DASHBOARD.md) |
 | RTSP, multiple streams, ONNX/TensorRT | FFmpeg + MediaMTX simulated cameras, `run_multi.py`, TensorRT FP16. | **4** small / **2** full-HD / **1** crowd camera in real time on the laptop ([doc 08](docs/08_STREAMING_PERFORMANCE.md)) |
-| Multi-camera | Both CAVIAR views synced from the burned-in clock; two-camera door fusion. | 72,518/72,518 frames synced; fusion did **not** beat one good camera ([doc 11](docs/11_MULTI_CAMERA.md)) |
+| Multi-camera | Both CAVIAR views synced from the burned-in clock; two-camera door fusion; one ID per person across 15 calibrated cameras (synthetic store). | 72,518/72,518 frames synced; fusion did **not** beat one good camera; cross-camera IDF1 0.110 → **0.281** with floor linking ([doc 11](docs/11_MULTI_CAMERA.md)) |
 
 ## Headline result: counting before and after
 
@@ -48,6 +48,8 @@ What is **not** solved, in plain words:
 - **One hour live on real footage** (MEVA, full HD, 30 fps): runs the whole hour live into the dashboard
   (lag at most 3.1 s), but skips 2.5% of the frames over the hour: no headroom left on this laptop
   ([doc 08 §9](docs/08_STREAMING_PERFORMANCE.md)).
+- **Cross-camera identities** (synthetic store, 15 cameras): floor linking lifts global IDF1 from 0.110 to 0.281, but
+  people are still split into many IDs (238 predicted for 31 true); appearance matching is the next step.
 - **Staff filtering** depends on the tracker keeping one ID. No public dataset labels staff, so it is not scored.
 
 ## Quick start (Windows, PowerShell)
@@ -76,7 +78,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (102 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (106 tests; the API integration test runs when the stack is up).
 
 ## How it works
 
@@ -111,7 +113,7 @@ profile. Draw it with `python tools/setup_scene.py`. Details: [doc 02](docs/02_A
 | [08 Streaming and performance](docs/08_STREAMING_PERFORMANCE.md) | TensorRT, GMC bottleneck, RTSP, multi-stream capacity |
 | [09 Evaluation method](docs/09_EVALUATION_METHOD.md) | Ground truth, dev/test split, metrics |
 | [10 Results](docs/10_RESULTS.md) | All result tables |
-| [11 Multi-camera](docs/11_MULTI_CAMERA.md) | Clock sync of two views, two-camera fusion |
+| [11 Multi-camera](docs/11_MULTI_CAMERA.md) | Clock sync of two views, two-camera fusion, cross-camera IDs |
 | [12 Demo](docs/12_DEMO.md) | Three ways to see it working |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Every problem met, its cause and fix |
 
@@ -125,7 +127,7 @@ scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             102 tests                                     docs/          everything above
+tests/             106 tests                                     docs/          everything above
 ```
 
 ## Data acknowledgements and licences

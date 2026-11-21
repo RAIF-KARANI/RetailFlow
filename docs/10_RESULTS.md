@@ -278,3 +278,9 @@ Full details: [`11_MULTI_CAMERA.md`](11_MULTI_CAMERA.md).
   the door at its image edge (recall 0.73 there vs 0.92 elsewhere) and found only 15 of 72 crossings.
 - **MMPTRACK not used:** access requires signing an agreement and e-mailing it; no public download.
 - Cross-camera re-identification not built: CAVIAR has no cross-view identity labels to test it.
+
+## 6. Cross-camera identities (after Phase 8)
+
+Synthetic store, 15 cameras, minutes 2–7 (settings chosen on minutes 0–2), doc 11 §7: global IDF1
+0.110 (no linking) → **0.281** (floor linking); with ground-truth per-camera tracks the linking reaches
+0.825 on dev, so per-camera tracking breaks are the main loss.

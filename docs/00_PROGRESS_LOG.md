@@ -338,3 +338,7 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   (baseline → final, doc 05 §8). **Learned:** most errors are steps lost at track breaks.
 - **Head blur in the demo:** the preview showed faces because `demo.ps1` never passed `--blur-heads`;
   it now always does.
+- **Cross-camera IDs** (plan Version 2): SmartSpaces scene 071, 15 cameras tracked one by one, linked on the
+  floor (`retailflow/mtmc.py`). Test (minutes 2–7): global IDF1 0.110 → 0.281. **Learned:** with perfect
+  per-camera tracks the same linking gets 0.825, so the per-camera tracker is the bottleneck; appearance
+  matching is next.

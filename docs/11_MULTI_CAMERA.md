@@ -117,9 +117,53 @@ only helps if it sees the entrance properly, which is an installation decision, 
 clock. The pieces exist: each session would store its clock start, and the API would merge sessions
 of one site. This is listed as future work in doc 10.
 
+## 7. One ID per person across 15 cameras (synthetic store, after Phase 8)
+
+CAVIAR cannot score cross-camera identities (§6), and MMPTRACK's terms do not fit this project (§1).
+NVIDIA's **PhysicalAI-SmartSpaces** (CC BY 4.0, `tools/download_data.md` §6) has a **synthetic** retail
+store with 15 synchronised, calibrated, angled cameras and ground truth where every person keeps one ID
+in all cameras. Scene 071: 31 people, about 13 minutes. Synthetic people, so this measures whether the
+**method** works, not real-world accuracy.
+
+**Method** (`retailflow/mtmc.py`, no appearance model):
+1. Each camera is tracked on its own with the deployed detector and tracker (`tools/track_multicam.py`).
+2. Every box's feet point is put on the floor with the camera's homography (median error against the
+   dataset's floor positions: 0.17 m; boxes cut off at the bottom edge are skipped).
+3. Tracks of different cameras that are on the floor at the same place at the same time
+   (median distance ≤ 0.5 m) are the same person. Joined closest first; never two tracks of one camera
+   at the same moment.
+4. A path that ends, followed within 4 s by one that starts nearby at walking speed, is the same person
+   (hand-off between views, or a broken track re-joined).
+
+**Dev / test split in time:** minutes 0–2 were used for every choice (link distance 0.5 m and hand-off
+gap 4 s, from a 9-setting sweep where IDF1 moved only between 0.417 and 0.445); minutes 2–7 were scored once.
+
+**Metric:** global IDF1, the AI City Challenge multi-camera measure: boxes matched per camera and frame
+(IoU ≥ 0.5), and a person only counts as identified if they keep **one** ID across all cameras.
+`python evaluate_mtmc.py --tracks outputs/mtmc/scene_071/tracks_7min --from-s 120`.
+
+| | Dev, minutes 0–2 | **Test, minutes 2–7** |
+|---|---|---|
+| Detection recall / precision | 0.933 / 0.905 | 0.927 / 0.891 |
+| Mean per-camera IDF1 (each camera alone) | 0.571 | 0.415 |
+| Global IDF1, **no linking** (every camera track a separate person) | 0.169 | 0.110 |
+| Global IDF1, **floor linking** | 0.445 | **0.281** |
+| Predicted people (seen ≥ 10 s) / true people | 118 / 31 | 238 / 31 |
+
+**What limits it, measured on dev:**
+- Given the **ground-truth** per-camera tracks, the same linking reaches global IDF1 **0.825** and never
+  puts two people under one ID; it still splits the 31 people into 71, mainly where a camera never sees
+  the person's feet at the same moment as the others, or projects them metres off (legs hidden behind
+  shelves, or camera_0641, whose projections are often far off).
+- The real per-camera tracker breaks people into many pieces (971 camera tracks in 2 minutes for 31
+  people) and swaps IDs, so linking starts from much worse input: 0.825 → 0.445.
+- So the next steps are **appearance matching** (what a person looks like) to join pieces that geometry
+  cannot, and a steadier per-camera tracker. Unique-visitor counts are not reliable yet (238 predicted
+  vs 31 true over 5 minutes).
+
 ## 6. Limits
 
-- **No cross-camera identities.** CAVIAR numbers people separately in each view (e.g. `TwoEnterShop1`:
+- **No cross-camera identities on real footage.** (A synthetic store is scored in §7.) CAVIAR numbers people separately in each view (e.g. `TwoEnterShop1`:
   12 IDs in the corridor view, 10 in the front view), so cross-camera re-identification (the same
   person in both views by appearance) **cannot be scored** here. It was not built, rather than built
   untested. MMPTRACK (§1) would allow it.
