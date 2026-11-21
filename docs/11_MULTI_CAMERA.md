@@ -125,7 +125,7 @@ store with 15 synchronised, calibrated, angled cameras and ground truth where ev
 in all cameras. Scene 071: 31 people, about 13 minutes. Synthetic people, so this measures whether the
 **method** works, not real-world accuracy.
 
-**Method** (`retailflow/mtmc.py`, no appearance model):
+**Method** (`retailflow/mtmc.py`; colour matching added in step 5):
 1. Each camera is tracked on its own with the deployed detector and tracker (`tools/track_multicam.py`).
 2. Every box's feet point is put on the floor with the camera's homography (median error against the
    dataset's floor positions: 0.17 m; boxes cut off at the bottom edge are skipped).
@@ -134,21 +134,23 @@ in all cameras. Scene 071: 31 people, about 13 minutes. Synthetic people, so thi
    at the same moment.
 4. A path that ends, followed within 4 s by one that starts nearby at walking speed, is the same person
    (hand-off between views, or a broken track re-joined).
+5. Optional colour matching (below) joins pieces that position alone cannot.
 
 **Dev / test split in time:** minutes 0–2 were used for every choice (link distance 0.5 m and hand-off
 gap 4 s, from a 9-setting sweep where IDF1 moved only between 0.417 and 0.445); minutes 2–7 were scored once.
 
 **Metric:** global IDF1, the AI City Challenge multi-camera measure: boxes matched per camera and frame
 (IoU ≥ 0.5), and a person only counts as identified if they keep **one** ID across all cameras.
-`python evaluate_mtmc.py --tracks outputs/mtmc/scene_071/tracks_7min --from-s 120`.
+`python evaluate_mtmc.py --tracks outputs/mtmc/scene_071/tracks_7min --from-s 120 [--appearance]`.
 
 | | Dev, minutes 0–2 | **Test, minutes 2–7** |
 |---|---|---|
 | Detection recall / precision | 0.933 / 0.905 | 0.927 / 0.891 |
 | Mean per-camera IDF1 (each camera alone) | 0.571 | 0.415 |
 | Global IDF1, **no linking** (every camera track a separate person) | 0.169 | 0.110 |
-| Global IDF1, **floor linking** | 0.445 | **0.281** |
-| Predicted people (seen ≥ 10 s) / true people | 118 / 31 | 238 / 31 |
+| Global IDF1, **floor linking** | 0.445 | 0.281 |
+| Global IDF1, **floor linking + colour** | 0.509 | **0.369** |
+| Predicted people seen ≥ 10 s (true: 31), floor / + colour | 118 / 91 | 238 / 169 |
 
 **What limits it, measured on dev:**
 - Given the **ground-truth** per-camera tracks, the same linking reaches global IDF1 **0.825** and never
@@ -157,9 +159,17 @@ gap 4 s, from a 9-setting sweep where IDF1 moved only between 0.417 and 0.445); 
   shelves, or camera_0641, whose projections are often far off).
 - The real per-camera tracker breaks people into many pieces (971 camera tracks in 2 minutes for 31
   people) and swaps IDs, so linking starts from much worse input: 0.825 → 0.445.
-- So the next steps are **appearance matching** (what a person looks like) to join pieces that geometry
-  cannot, and a steadier per-camera tracker. Unique-visitor counts are not reliable yet (238 predicted
-  vs 31 true over 5 minutes).
+- **Colour matching** (`retailflow/appearance.py`) was added for that: hue/saturation histograms of the
+  torso and the legs, from up to 6 clear views per track (boxes hidden behind another person are skipped).
+  Same person in another camera vs different people: median distance 0.32 vs 0.63, AUC 0.94 (dev,
+  ground-truth boxes). It allows overlap links up to 2 m apart and hand-offs up to 30 s when colours
+  match, and vetoes position links when colours clearly differ. Chosen on dev from 12 settings
+  (match ≤ 0.30, veto > 0.6, gap ≤ 30 s; IDF1 0.463–0.509). **Privacy:** descriptors are computed
+  during the run and kept in memory only, never written to disk (project rule for appearance
+  features); they describe clothing colours, not faces.
+- Still open: a steadier per-camera tracker (it breaks people into many pieces) and a learned
+  re-identification model instead of colours (it would add a dependency). Unique-visitor counts are
+  not reliable yet (169 people seen ≥ 10 s predicted vs 31 true over 5 minutes).
 
 ## 6. Limits
 

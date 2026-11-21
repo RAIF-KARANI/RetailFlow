@@ -27,6 +27,7 @@ import motmetrics as mm
 import numpy as np
 import pandas as pd
 
+from retailflow.appearance import track_descriptors
 from retailflow.evaluate import iou_distance, tracking_metrics
 from retailflow.mtmc import MTMCConfig, floor_points, link
 
@@ -67,8 +68,18 @@ def global_idf1(gt: pd.DataFrame, pred: pd.DataFrame, id_col: str, frames: dict,
     return {k: round(float(s[k].iloc[0]), 4) for k in s.columns}
 
 
+def appearance_for(scene: Path, cams: dict) -> dict:
+    """{(camera, track_id): colour descriptor}, computed now and kept in memory only (never saved)."""
+    app = {}
+    for cam, t in cams.items():
+        for tid, d in track_descriptors(str(scene / cam / "video.mp4"), t).items():
+            app[(cam, tid)] = d
+    return app
+
+
 def evaluate(scene: Path, track_dir: Path, cfg: MTMCConfig, per_camera: bool = True,
-             from_s: float = 0.0, to_s: float | None = None) -> dict:
+             from_s: float = 0.0, to_s: float | None = None, app: dict | None = None,
+             baseline: bool = True) -> dict:
     """Link on everything tracked (as a live system would), score only [from_s, to_s)."""
     cams, frames, fps = load_tracks(scene, track_dir, cfg)
     f0 = int(round(from_s * fps))
@@ -76,7 +87,7 @@ def evaluate(scene: Path, track_dir: Path, cfg: MTMCConfig, per_camera: bool = T
         frames = {c: min(n, int(round(to_s * fps))) for c, n in frames.items()}
     gt = load_gt(scene)
     gt = gt[gt.camera.isin(frames) & (gt.frame < gt.camera.map(frames)) & (gt.frame >= f0)]
-    links = link(cams, fps, cfg)
+    links = link(cams, fps, cfg, appearance=app)
     pred = pd.concat([t.assign(camera=c) for c, t in cams.items()], ignore_index=True)
     pred = pred.merge(links[["camera", "track_id", "global_id"]], on=["camera", "track_id"])
     pred["local_id"] = pred.camera.str[-4:].astype(int) * 100000 + pred.track_id   # no linking
@@ -87,7 +98,8 @@ def evaluate(scene: Path, track_dir: Path, cfg: MTMCConfig, per_camera: bool = T
            "pred_people": int(pred.global_id.nunique()),
            "pred_people_10s": int(seen.ge(10 * fps).sum()),
            "linked": global_idf1(gt, pred, "global_id", frames, f0),
-           "no_linking": global_idf1(gt, pred, "local_id", frames, f0), "config": asdict(cfg)}
+           "no_linking": global_idf1(gt, pred, "local_id", frames, f0) if baseline else None,
+           "appearance": app is not None, "config": asdict(cfg)}
     if per_camera:
         per = []
         for cam, n in frames.items():
@@ -110,10 +122,33 @@ def main() -> None:
     p.add_argument("--name", default="mtmc_results", help="results file name in the tracks' parent folder")
     p.add_argument("--link-m", type=float, default=None)
     p.add_argument("--gap-s", type=float, default=None)
+    p.add_argument("--appearance", action="store_true", help="also use colour descriptors (in memory only)")
+    p.add_argument("--app-thr", type=float, default=None)
+    p.add_argument("--app-veto", type=float, default=None)
+    p.add_argument("--long-gap-s", type=float, default=None)
     args = p.parse_args()
     scene = Path(args.scene_dir)
     track_dir = Path(args.tracks or f"outputs/mtmc/{scene.name}/tracks")
     out_dir = track_dir.parent
+
+    app = None
+    if args.appearance:
+        cams, _, _ = load_tracks(scene, track_dir, MTMCConfig())
+        app = appearance_for(scene, cams)
+        print(f"colour descriptors for {len(app)} camera tracks (in memory)", flush=True)
+
+    if args.sweep and app is not None:
+        rows = []
+        for thr in (0.3, 0.35, 0.4):
+            for veto in (None, 0.6):
+                for lg in (10.0, 30.0):
+                    cfg = replace(MTMCConfig(), app_thr=thr, app_veto=veto, long_gap_s=lg)
+                    r = evaluate(scene, track_dir, cfg, per_camera=False, app=app, baseline=False)
+                    rows.append({"app_thr": thr, "app_veto": veto, "long_gap_s": lg, "idf1": r["linked"]["idf1"],
+                                 "people": r["pred_people"], "people_10s": r["pred_people_10s"]})
+                    print(rows[-1], flush=True)
+        pd.DataFrame(rows).to_csv(out_dir / "mtmc_sweep_appearance.csv", index=False)
+        return
 
     if args.sweep:
         rows = []
@@ -132,7 +167,10 @@ def main() -> None:
         cfg = replace(cfg, link_m=args.link_m)
     if args.gap_s is not None:
         cfg = replace(cfg, gap_s=args.gap_s)
-    r = evaluate(scene, track_dir, cfg, from_s=args.from_s, to_s=args.to_s)
+    for k in ("app_thr", "app_veto", "long_gap_s"):
+        if getattr(args, k) is not None:
+            cfg = replace(cfg, **{k: getattr(args, k)})
+    r = evaluate(scene, track_dir, cfg, from_s=args.from_s, to_s=args.to_s, app=app)
     (out_dir / f"{args.name}.json").write_text(json.dumps(r, indent=2))
     print(json.dumps({k: v for k, v in r.items() if k != "per_camera"}, indent=2))
     print(pd.DataFrame(r["per_camera"]).to_string(index=False))

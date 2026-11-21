@@ -16,9 +16,16 @@ homography per camera (floor metres -> image pixels). Steps:
    (`walk_mps` * gap + `handoff_m`), is the same person leaving one view (or a
    broken track) and appearing again. Linked best-first, each end and start once.
 
-No appearance (ReID) is used: on synchronised cameras with a shared floor,
-position alone decides. Appearance would help when views do not overlap and
-several people hand off at once; that is listed as a limit.
+Optional **appearance** (`appearance=`, colour descriptors from
+retailflow/appearance.py, kept in memory only) adds three things:
+- overlap links up to `app_link_m` apart when the colours match (`app_thr`), for
+  feet projected metres off (legs hidden behind shelves);
+- hand-offs with gaps up to `long_gap_s` when the colours match and the distance
+  is walkable (people out of every view behind shelves);
+- a veto: a position-only link is refused when the colours clearly differ
+  (`app_veto`), which stops an ID switch from merging two people.
+Appearance links are added after all position links, and only between groups
+whose average colours still match.
 """
 
 from __future__ import annotations
@@ -40,6 +47,11 @@ class MTMCConfig:
     edge_px: float = 4.0         # boxes this close to the bottom edge have no usable feet
     close_frac: float | None = None  # overlap link by share of shared frames within link_m
                                      # (robust to legs hidden behind shelves); None = median rule
+    # appearance (used only when descriptors are passed to link())
+    app_thr: float = 0.30        # colours match: Hellinger distance at most this (chosen on dev minutes 0-2)
+    app_veto: float | None = 0.6 # position link refused when colours differ more than this
+    app_link_m: float = 2.0      # overlap link allowed up to this far when colours match
+    long_gap_s: float = 30.0     # hand-off allowed up to this gap when colours match
 
 
 def floor_points(tracks: pd.DataFrame, H: np.ndarray, frame_h: int, cfg: MTMCConfig) -> pd.DataFrame:
@@ -53,11 +65,26 @@ def floor_points(tracks: pd.DataFrame, H: np.ndarray, frame_h: int, cfg: MTMCCon
 
 
 class _Groups:
-    """Union-find over tracklets that keeps, per group, each camera's time spans."""
+    """Union-find over tracklets that keeps, per group, each camera's time spans
+    and (optionally) the group's average appearance."""
 
-    def __init__(self, spans: dict):
+    def __init__(self, spans: dict, app: dict | None = None, weight: dict | None = None):
         self.parent = {k: k for k in spans}
         self.spans = {k: {k[0]: [v]} for k, v in spans.items()}   # root -> cam -> [(start, end)]
+        self.app = {}                                              # root -> (sum of vectors, weight)
+        for k, v in (app or {}).items():
+            if k in self.parent:
+                w = float((weight or {}).get(k, 1))
+                self.app[k] = (v * w, w)
+
+    def app_dist(self, a, b) -> float | None:
+        """Colour distance between two groups' average descriptors (None if one has none)."""
+        a, b = self.find(a), self.find(b)
+        if a not in self.app or b not in self.app:
+            return None
+        va, vb = self.app[a][0], self.app[b][0]
+        va, vb = va / (np.linalg.norm(va) or 1), vb / (np.linalg.norm(vb) or 1)
+        return float(np.sqrt(max(0.0, 1.0 - float(va @ vb))))
 
     def find(self, k):
         while self.parent[k] != k:
@@ -81,11 +108,17 @@ class _Groups:
         self.parent[b] = a
         for cam, lst in self.spans.pop(b).items():
             self.spans[a].setdefault(cam, []).extend(lst)
+        if b in self.app:
+            vb, wb = self.app.pop(b)
+            va, wa = self.app.get(a, (np.zeros_like(vb), 0.0))
+            self.app[a] = (va + vb, wa + wb)
         return True
 
 
-def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig()) -> pd.DataFrame:
+def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig(),
+         appearance: dict | None = None) -> pd.DataFrame:
     """Global IDs. `cams`: camera -> tracks with floor points (see `floor_points`).
+    `appearance`: optional {(camera, track_id): descriptor} (in memory only).
 
     Returns one row per tracklet: camera, track_id, global_id, start, end, n.
     """
@@ -97,7 +130,18 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
         return pd.DataFrame(columns=["camera", "track_id", "global_id", "start", "end", "n"])
     allt["key"] = list(zip(allt.camera, allt.track_id))
     info = allt.groupby("key").agg(start=("frame", "min"), end=("frame", "max"), n=("frame", "size"))
-    groups = _Groups({k: (r.start, r.end) for k, r in info.iterrows()})
+    groups = _Groups({k: (r.start, r.end) for k, r in info.iterrows()}, appearance, info.n.to_dict())
+    use_app = bool(appearance)
+
+    def colours_differ(a, b) -> bool:
+        if not use_app or cfg.app_veto is None:
+            return False
+        d = groups.app_dist(a, b)
+        return d is not None and d > cfg.app_veto
+
+    def colours_match(a, b) -> bool:
+        d = groups.app_dist(a, b)
+        return d is not None and d <= cfg.app_thr
 
     # ---- 2. overlap links: per sampled frame, distances between every pair of cameras' people
     u = allt[allt.usable & (allt.frame % cfg.sample_every == 0)]
@@ -109,12 +153,13 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
         keys = g.key.tolist()
         camv = g.camera.to_numpy()
         d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1])
-        ii, jj = np.where((d <= 3 * cfg.link_m) & (camv[:, None] < camv[None, :]))
+        radius = max(3 * cfg.link_m, 2 * cfg.app_link_m if use_app else 0)
+        ii, jj = np.where((d <= radius) & (camv[:, None] < camv[None, :]))
         for i, j in zip(ii, jj):
             dsum.setdefault((keys[i], keys[j]), []).append(d[i, j])
     # Common frames counted over ALL shared frames (also those where they were far apart):
     common = _shared_frames(u)
-    cand = []
+    cand, app_cand = [], []
     for pair, ds in dsum.items():
         n_common = common.get(pair, 0)
         if n_common < cfg.min_common:
@@ -130,8 +175,14 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
         med = np.median(np.r_[ds, np.full(far, np.inf)]) if far else np.median(ds)
         if med <= cfg.link_m:
             cand.append((med, pair))
+        elif use_app and med <= cfg.app_link_m:
+            app_cand.append((med, pair))
     for _, (a, b) in sorted(cand):
-        groups.merge(a, b)
+        if not colours_differ(a, b):
+            groups.merge(a, b)
+    for _, (a, b) in sorted(app_cand):          # after all position links, colours must match
+        if colours_match(a, b):
+            groups.merge(a, b)
 
     # ---- 3. hand-offs between groups (also re-joins a camera's own broken tracks)
     gid = {k: groups.find(k) for k in info.index}
@@ -143,17 +194,24 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
         starts[grp] = (int(g.frame.iloc[0]), head.xw.median(), head.yw.median())
         ends[grp] = (int(g.frame.iloc[-1]), tail.xw.median(), tail.yw.median())
     gap = cfg.gap_s * fps
+    long_gap = (cfg.long_gap_s if use_app else cfg.gap_s) * fps
     hand = []
     for a, (fe, xe, ye) in ends.items():
         for b, (fs, xs, ys) in starts.items():
-            if a == b or not (0 < fs - fe <= gap):
+            if a == b or not (0 < fs - fe <= long_gap):
                 continue
             dist = float(np.hypot(xs - xe, ys - ye))
-            if dist <= cfg.handoff_m + cfg.walk_mps * (fs - fe) / fps:
-                hand.append((dist + (fs - fe) / fps, a, b))
+            if dist > cfg.handoff_m + cfg.walk_mps * (fs - fe) / fps:
+                continue
+            if fs - fe <= gap:
+                hand.append((0, dist + (fs - fe) / fps, a, b))        # position hand-off first
+            else:
+                hand.append((1, (fs - fe) / fps, a, b))               # long gap: needs colours
     used_end, used_start = set(), set()
-    for _, a, b in sorted(hand):
+    for kind, _, a, b in sorted(hand, key=lambda h: (h[0], h[1])):
         if a in used_end or b in used_start:
+            continue
+        if (kind == 0 and colours_differ(a, b)) or (kind == 1 and not colours_match(a, b)):
             continue
         if groups.merge(a, b):
             used_end.add(a)

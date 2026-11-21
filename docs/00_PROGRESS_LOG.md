@@ -342,3 +342,5 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   floor (`retailflow/mtmc.py`). Test (minutes 2–7): global IDF1 0.110 → 0.281. **Learned:** with perfect
   per-camera tracks the same linking gets 0.825, so the per-camera tracker is the bottleneck; appearance
   matching is next.
+- **Colour matching across cameras:** torso/legs colour histograms (no new dependency, kept in memory only)
+  join pieces geometry cannot. Test global IDF1 0.281 → 0.369 (doc 11 §7).

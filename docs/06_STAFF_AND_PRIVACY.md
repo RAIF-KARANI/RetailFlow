@@ -82,3 +82,7 @@ the premises, the whole frame should be treated as personal data.
 `tests/test_heatmap_staff_privacy.py`: staff flagged after `min_seconds` and not before,
 no rule = no flags, offline staff detection, head box geometry, pixelation changes only
 the head region.
+
+**Cross-camera colour descriptors** (after Phase 8, `retailflow/appearance.py`): torso and leg colour
+histograms used to join one person's tracks across cameras. Same rule as ReID embeddings: computed during
+the run, kept in memory, never saved. They describe clothing colours only, not faces.
