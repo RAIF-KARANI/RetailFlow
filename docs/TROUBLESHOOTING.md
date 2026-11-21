@@ -204,3 +204,23 @@ Format: **problem → cause → fix**. Newest at the bottom.
 ### Heads were not blurred in the live preview
 - **Cause:** `demo.ps1` did not pass `--blur-heads`; the blur itself works in the preview path.
 - **Fix:** the demo always passes it.
+
+### 15 cameras in one process: the TensorRT engine refused a batch
+- **Cause:** the engines are exported with batch 1 (dynamic image size only): "input size (15, 3, 544, 960)
+  is outside the TensorRT optimization profile".
+- **Fix:** frames go through the shared detector one at a time. A batch engine is a possible next step.
+
+### 15 cameras analysed at only 1.6 per second each
+- **Cause:** each replay thread turned all 30 frames per second into images (450 per second), and creating
+  those arrays in Python competes with the main loop for the GIL; per frame 25 ms instead of 10 ms.
+  Hardware decoding did not help (1.77 per second).
+- **Fix:** only every 3rd frame becomes an image (`keep_every`); the others are decoded with `grab()` to keep
+  time. Result: 4.66 analyses per camera per second.
+
+### Floor map labels drawn huge
+- **Cause:** the SVG worked in metres, so text was under 1 unit tall, and the browser's minimum font size
+  applies in SVG units.
+- **Fix:** draw at 20 units per metre.
+
+### Docker Desktop's engine stopped answering (500 errors) more than once
+- **Fix:** quit and restart Docker Desktop; the stack then starts normally.

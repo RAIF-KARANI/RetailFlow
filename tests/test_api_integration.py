@@ -87,3 +87,25 @@ def test_unknown_camera_session_is_404():
     with pytest.raises(urllib.error.HTTPError) as e:
         call("POST", "/api/sessions", {"camera_id": f"nope_{uuid.uuid4().hex}", "source": "x"})
     assert e.value.code == 404
+
+
+def test_store_run_state_and_finish():
+    sid = f"test_store_{uuid.uuid4().hex[:8]}"
+    cfg = {"store_id": sid, "description": "t", "cameras": ["camera_a", "camera_b"],
+           "camera_xy": {"camera_a": [0, 0], "camera_b": [5, 5]}, "floor_bounds": [-10, -10, 10, 10]}
+    call("PUT", f"/api/stores/{sid}", cfg)
+    try:
+        rid = call("POST", f"/api/stores/{sid}/runs", {"run_info": {"cameras": 2}})["run_id"]
+        state = {"t": 12.5, "people_now": [{"id": 3, "x": 1.0, "y": 2.0, "cameras": ["a"]}],
+                 "unique_people": 1, "people": [], "trails": {"3": [[1, 2]]}}
+        call("PUT", f"/api/store-runs/{rid}/state", state)
+        r = call("GET", f"/api/store-runs/{rid}")
+        assert not r["finished"] and r["state"]["people_now"][0]["id"] == 3
+        stores = {s["store_id"]: s for s in call("GET", "/api/stores")}
+        assert stores[sid]["live"] and stores[sid]["cameras"] == 2
+        call("POST", f"/api/store-runs/{rid}/finish", {"state": {**state, "t": 20.0}, "summary": {"ok": 1}})
+        s = call("GET", f"/api/stores/{sid}")
+        assert s["config"]["floor_bounds"] == [-10, -10, 10, 10]
+        assert s["runs"][0]["finished_at"] and s["runs"][0]["t"] == 20.0
+    finally:
+        call("DELETE", f"/api/stores/{sid}")

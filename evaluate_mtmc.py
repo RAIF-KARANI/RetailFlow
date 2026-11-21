@@ -112,6 +112,46 @@ def evaluate(scene: Path, track_dir: Path, cfg: MTMCConfig, per_camera: bool = T
     return out
 
 
+def evaluate_live(scene: Path, run_dir: Path, from_s: float = 0.0, to_s: float | None = None) -> dict:
+    """Score a run_store.py run: its own live person numbers, on the frames each camera analysed."""
+    links = pd.read_csv(run_dir / "links.csv")
+    gt_all, preds, frames_by = load_gt(scene), [], {}
+    fps = 30.0
+    for d in sorted(run_dir.glob("camera_*")):
+        fr = [int(x) for x in (d / "analysed_frames.txt").read_text().split()]
+        fps = json.loads((d / "summary.json").read_text())["fps"]
+        lo, hi = from_s * fps, (to_s * fps if to_s else float("inf"))
+        frames_by[d.name] = [f for f in fr if lo <= f < hi]
+        t = pd.read_csv(d / "tracks.csv").assign(camera=d.name)
+        preds.append(t)
+    pred = pd.concat(preds, ignore_index=True).merge(links[["camera", "track_id", "person"]],
+                                                     on=["camera", "track_id"], how="left")
+    pred["person"] = pred.person.fillna(-1).astype(int)
+    pred["local_id"] = pred.camera.str[-4:].astype(int) * 100000 + pred.track_id
+    keep = set((c, f) for c, fs in frames_by.items() for f in fs)
+    gt = gt_all[[(c, f) in keep for c, f in zip(gt_all.camera, gt_all.frame)]]
+    pred = pred[[(c, f) in keep for c, f in zip(pred.camera, pred.frame)]]
+    acc_frames = {c: fs for c, fs in frames_by.items()}
+
+    def idf1(col):
+        acc = mm.MOTAccumulator(auto_id=True)
+        gb, pb = dict(tuple(gt.groupby(["camera", "frame"]))), dict(tuple(pred.groupby(["camera", "frame"])))
+        empty = pd.DataFrame(columns=["obj", col, *COLS])
+        for c, fs in acc_frames.items():
+            for f in fs:
+                g, p = gb.get((c, f), empty), pb.get((c, f), empty)
+                acc.update(g["obj"].tolist(), p[col].tolist(),
+                           iou_distance(g[COLS].to_numpy(float), p[COLS].to_numpy(float)))
+        r = mm.metrics.create().compute(acc, metrics=["idf1", "recall", "precision"], name="x")
+        return {k: round(float(r[k].iloc[0]), 4) for k in r.columns}
+
+    seen = pred.groupby("person").frame.size()
+    summ = json.loads((run_dir / "summary.json").read_text())
+    return {"run": str(run_dir), "window_s": [from_s, to_s], "analysed_fps_mean": summ.get("analysed_fps_mean"),
+            "analysed_frames": sum(len(v) for v in frames_by.values()), "true_people": int(gt.obj.nunique()),
+            "pred_people": int(pred.person.nunique()), "linked": idf1("person"), "no_linking": idf1("local_id")}
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--scene-dir", default="data/smartspaces/scene_071")
@@ -126,7 +166,13 @@ def main() -> None:
     p.add_argument("--app-thr", type=float, default=None)
     p.add_argument("--app-veto", type=float, default=None)
     p.add_argument("--long-gap-s", type=float, default=None)
+    p.add_argument("--live-run", default=None, help="score a run_store.py output folder instead")
     args = p.parse_args()
+    if args.live_run:
+        r = evaluate_live(Path(args.scene_dir), Path(args.live_run), args.from_s, args.to_s)
+        (Path(args.live_run) / "live_score.json").write_text(json.dumps(r, indent=2))
+        print(json.dumps(r, indent=2))
+        return
     scene = Path(args.scene_dir)
     track_dir = Path(args.tracks or f"outputs/mtmc/{scene.name}/tracks")
     out_dir = track_dir.parent

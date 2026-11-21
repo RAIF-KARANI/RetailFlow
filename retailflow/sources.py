@@ -46,9 +46,15 @@ class LatestFrameReader:
     decoded but never handed out are counted in `skipped`.
     """
 
-    def __init__(self, cap, max_frames: int | None = None):
+    def __init__(self, cap, max_frames: int | None = None, pace_fps: float | None = None,
+                 keep_every: int = 1):
+        """`pace_fps`: release frames no faster than this (a file replayed as a live camera).
+        `keep_every`: only turn every n-th frame into an image (the others are still decoded,
+        to keep time, but never copied into Python): for many cameras analysed at a low rate."""
         self._cap = cap
         self.max_frames = max_frames
+        self.pace_fps = pace_fps
+        self.keep_every = max(1, int(keep_every))
         self._cond = threading.Condition()
         self._latest: tuple[int, np.ndarray] | None = None
         self._last_out = -1
@@ -60,10 +66,25 @@ class LatestFrameReader:
 
     def _run(self) -> None:
         i = 0
+        t0 = time.perf_counter()
         while not self._done and (self.max_frames is None or i < self.max_frames):
+            if i % self.keep_every:
+                ok = self._cap.grab()         # decode only: no image array, almost no GIL use
+                if not ok:
+                    break
+                if self.pace_fps:
+                    wait = t0 + i / self.pace_fps - time.perf_counter()
+                    if wait > 0:
+                        time.sleep(wait)
+                i += 1
+                continue
             ok, img = self._cap.read()        # OpenCV releases the GIL while decoding
             if not ok:
                 break
+            if self.pace_fps:                 # a live camera delivers frame i at i / fps
+                wait = t0 + i / self.pace_fps - time.perf_counter()
+                if wait > 0:
+                    time.sleep(wait)
             with self._cond:
                 self._latest = (i, img)
                 self.received = i + 1
@@ -86,6 +107,22 @@ class LatestFrameReader:
             self.skipped += i - self._last_out - 1
             self._last_out = i
             return i, img
+
+    def newest(self) -> tuple[int, np.ndarray] | None:
+        """Non-blocking: the newest frame if it is newer than the last one handed out, else None."""
+        with self._cond:
+            if not self._has_new():
+                return None
+            i, img = self._latest
+            self.skipped += i - self._last_out - 1
+            self._last_out = i
+            return i, img
+
+    @property
+    def finished(self) -> bool:
+        """The stream has ended and its last frame has been handed out."""
+        with self._cond:
+            return self._done and not self._has_new()
 
     def stop(self) -> None:
         with self._cond:

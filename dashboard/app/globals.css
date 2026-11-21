@@ -66,3 +66,5 @@ svg text { fill: var(--muted); font-size: 11px; }
          background: var(--accent); color: var(--panel); font-weight: 600; font-size: 14px; }
 .watch:hover { text-decoration: none; filter: brightness(1.1); }
 .matrix th[scope="row"] { color: var(--text); font-weight: 500; }
+.live-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600;
+            background: color-mix(in srgb, var(--in) 18%, transparent); color: var(--in); }

@@ -63,3 +63,26 @@ CREATE TABLE IF NOT EXISTS heatmaps (
     grid       JSONB NOT NULL,                        -- rows x cols person-seconds
     background BYTEA                                  -- PNG, median of sampled frames
 );
+
+-- A store: several calibrated cameras sharing one floor (run_store.py). `config` holds
+-- the camera names, their floor positions and the floor bounds, for drawing the map.
+CREATE TABLE IF NOT EXISTS stores (
+    store_id    TEXT PRIMARY KEY,
+    description TEXT NOT NULL DEFAULT '',
+    config      JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One live run over all of a store's cameras. `state` is the latest store-wide picture
+-- (replaced every few seconds): store-wide person numbers, floor positions, camera
+-- names and video-timeline seconds only. No images, no appearance features.
+CREATE TABLE IF NOT EXISTS store_runs (
+    run_id      UUID PRIMARY KEY,
+    store_id    TEXT NOT NULL REFERENCES stores (store_id) ON DELETE CASCADE,
+    run_info    JSONB NOT NULL DEFAULT '{}',
+    started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ,
+    state       JSONB,
+    summary     JSONB
+);

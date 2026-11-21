@@ -74,3 +74,35 @@ export function fmtTime(s: number): string {
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
+
+// ---- stores (several cameras, one floor; run_store.py)
+export type StoreListItem = { store_id: string; description: string; cameras: number; runs: number; live: boolean };
+
+export type StoreConfig = {
+  store_id: string;
+  description: string;
+  cameras: string[];
+  camera_xy: Record<string, [number, number]>;
+  floor_bounds: [number, number, number, number];   // x min, y min, x max, y max (metres)
+};
+
+export type StoreRunRow = { run_id: string; run_info: Record<string, unknown>; started_at: string;
+  finished_at: string | null; t: number | null; unique_people: number | null };
+
+export type Store = { store_id: string; description: string; config: StoreConfig; runs: StoreRunRow[] };
+
+export type PersonNow = { id: number; x: number; y: number; cameras: string[] };
+export type StorePerson = { id: number; first_s: number; last_s: number; seen_s: number; cameras: string[] };
+
+export type StoreState = {
+  t?: number;
+  people_now?: PersonNow[];
+  trails?: Record<string, [number, number][]>;
+  unique_people?: number;
+  people?: StorePerson[];
+  camera_people_now?: Record<string, number>;
+  camera_moves?: { cameras: string[]; matrix: number[][] };
+};
+
+export type StoreRun = { run_id: string; store_id: string; run_info: Record<string, unknown>; finished: boolean;
+  state: StoreState; summary: Record<string, unknown> | null };

@@ -1,0 +1,9 @@
+{
+  "store_id": "smartspaces_071",
+  "description": "Synthetic retail store (NVIDIA PhysicalAI-SmartSpaces, MTMC_Tracking_2024 scene_071, CC BY 4.0): 15 calibrated angled cameras over aisles, checkouts, freezers and a storage room. Synthetic people.",
+  "scene_dir": "data/smartspaces/scene_071",
+  "cameras": null,
+  "floor_bounds": [-19, -22, 19, 23],
+  "frame_h": 1080,
+  "fps": 30
+}

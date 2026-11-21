@@ -317,3 +317,108 @@ def session_background(sid: uuid.UUID):
     if h is None or h["background"] is None:
         raise HTTPException(404, "no background image")
     return Response(bytes(h["background"]), media_type="image/png")
+
+
+# ------------------------------------------------------------------ stores (run_store.py)
+class StoreRunIn(BaseModel):
+    run_info: dict = Field(default_factory=dict)
+
+
+class StoreFinishIn(BaseModel):
+    state: dict
+    summary: dict
+
+
+def _store_run(conn, rid: uuid.UUID) -> dict:
+    row = conn.execute("SELECT * FROM store_runs WHERE run_id = %s", (rid,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "unknown store run")
+    return row
+
+
+@app.put("/api/stores/{store_id}")
+def put_store(store_id: str, config: dict):
+    if config.get("store_id", store_id) != store_id:
+        raise HTTPException(400, "store_id in body does not match the URL")
+    with connect() as conn:
+        conn.execute("""INSERT INTO stores (store_id, description, config) VALUES (%s, %s, %s)
+                        ON CONFLICT (store_id) DO UPDATE
+                        SET description = EXCLUDED.description, config = EXCLUDED.config, updated_at = now()""",
+                     (store_id, config.get("description", ""), Jsonb(config)))
+    return {"store_id": store_id}
+
+
+@app.post("/api/stores/{store_id}/runs", status_code=201)
+def start_store_run(store_id: str, body: StoreRunIn):
+    rid = uuid.uuid4()
+    with connect() as conn:
+        if conn.execute("SELECT 1 FROM stores WHERE store_id = %s", (store_id,)).fetchone() is None:
+            raise HTTPException(404, "unknown store: register it with PUT /api/stores/{id} first")
+        conn.execute("INSERT INTO store_runs (run_id, store_id, run_info) VALUES (%s, %s, %s)",
+                     (rid, store_id, Jsonb(body.run_info)))
+    return {"run_id": str(rid)}
+
+
+@app.put("/api/store-runs/{rid}/state")
+def put_store_state(rid: uuid.UUID, state: dict):
+    with connect() as conn:
+        _store_run(conn, rid)
+        conn.execute("UPDATE store_runs SET state = %s, updated_at = now() WHERE run_id = %s", (Jsonb(state), rid))
+    return {"run_id": str(rid)}
+
+
+@app.post("/api/store-runs/{rid}/finish")
+def finish_store_run(rid: uuid.UUID, body: StoreFinishIn):
+    with connect() as conn:
+        _store_run(conn, rid)
+        conn.execute("UPDATE store_runs SET state = %s, summary = %s, updated_at = now(), finished_at = now() "
+                     "WHERE run_id = %s", (Jsonb(body.state), Jsonb(body.summary), rid))
+    return {"run_id": str(rid)}
+
+
+@app.get("/api/stores")
+def list_stores():
+    with connect() as conn:
+        rows = conn.execute("""
+            SELECT s.store_id, s.description, s.config, count(r.run_id) AS runs,
+                   bool_or(r.run_id IS NOT NULL AND r.finished_at IS NULL) AS live
+            FROM stores s LEFT JOIN store_runs r USING (store_id)
+            GROUP BY s.store_id ORDER BY s.store_id""").fetchall()
+    for r in rows:
+        r["cameras"] = len(r.pop("config").get("cameras", []))
+        r["live"] = bool(r["live"])
+    return rows
+
+
+@app.get("/api/stores/{store_id}")
+def get_store(store_id: str):
+    with connect() as conn:
+        s = conn.execute("SELECT * FROM stores WHERE store_id = %s", (store_id,)).fetchone()
+        if s is None:
+            raise HTTPException(404, "unknown store")
+        runs = conn.execute("""SELECT run_id, run_info, started_at, finished_at,
+                                      (state->>'t')::float AS t, (state->>'unique_people')::int AS unique_people
+                               FROM store_runs WHERE store_id = %s ORDER BY started_at DESC""",
+                            (store_id,)).fetchall()
+    for r in runs:
+        r["run_id"] = str(r["run_id"])
+    return {"store_id": s["store_id"], "description": s["description"], "config": s["config"], "runs": runs}
+
+
+@app.get("/api/store-runs/{rid}")
+def get_store_run(rid: uuid.UUID):
+    with connect() as conn:
+        r = _store_run(conn, rid)
+    return {"run_id": str(rid), "store_id": r["store_id"], "run_info": r["run_info"],
+            "finished": r["finished_at"] is not None, "state": r["state"] or {}, "summary": r["summary"],
+            "timeline": "video time (seconds from start of the store's videos)"}
+
+
+@app.delete("/api/stores/{store_id}")
+def delete_store(store_id: str):
+    """Remove a store and all its runs (cascade)."""
+    with connect() as conn:
+        n = conn.execute("DELETE FROM stores WHERE store_id = %s", (store_id,)).rowcount
+    if not n:
+        raise HTTPException(404, "unknown store")
+    return {"deleted": store_id}

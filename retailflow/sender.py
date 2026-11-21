@@ -111,3 +111,30 @@ class ApiEventSender:
             if ok:
                 body["background_png_b64"] = base64.b64encode(png.tobytes()).decode()
         _request("POST", f"{self.base}/api/sessions/{self.session_id}/finish", body, timeout=60)
+
+
+class StoreApiClient:
+    """Sends a live store run (run_store.py) to the API: config, state every few seconds, summary.
+
+    The state holds only anonymous data: person numbers, floor positions, camera names, times.
+    A failed post is skipped (the next state replaces it); the run itself never stops for the API.
+    """
+
+    def __init__(self, base_url: str, store: dict, run_info: dict | None = None):
+        self.base = base_url.rstrip("/").replace("//localhost:", "//127.0.0.1:")
+        self.store_id = store["store_id"]
+        _request("PUT", f"{self.base}/api/stores/{self.store_id}", store)
+        r = _request("POST", f"{self.base}/api/stores/{self.store_id}/runs", {"run_info": run_info or {}})
+        self.run_id = r["run_id"]
+        self.failed = 0
+
+    def state(self, state: dict) -> None:
+        try:
+            _request("PUT", f"{self.base}/api/store-runs/{self.run_id}/state", state, timeout=10)
+        except ApiError as e:
+            self.failed += 1
+            print(f"[store sender] {e}")
+
+    def finish(self, state: dict, summary: dict) -> None:
+        _request("POST", f"{self.base}/api/store-runs/{self.run_id}/finish",
+                 {"state": state, "summary": summary}, timeout=60)

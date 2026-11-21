@@ -171,6 +171,38 @@ gap 4 s, from a 9-setting sweep where IDF1 moved only between 0.417 and 0.445); 
   re-identification model instead of colours (it would add a dependency). Unique-visitor counts are
   not reliable yet (169 people seen ≥ 10 s predicted vs 31 true over 5 minutes).
 
+## 8. The store live: all cameras at once, on the dashboard
+
+`python run_store.py --store scenes/stores/smartspaces_071.json --seconds 300 --api http://127.0.0.1:8000`,
+then the dashboard's **Stores** section → `smartspaces_071`: people now on a floor map (store-wide
+number, last 10 s), visitors so far, a people table (cameras in the order they saw each person) and
+camera-to-camera moves, refreshed every 2 s.
+
+**How it runs on one laptop:**
+- Each camera's video is replayed at real-time speed in its own thread; the pipeline takes the newest
+  frame (as from a live camera). Only every 3rd frame is turned into an image: converting all 450
+  frames per second of 15 full-HD cameras starved the main loop (25 ms instead of 10 ms per analysed frame).
+- One detector serves all cameras (15 TensorRT copies do not fit in 8 GB); each camera has its own
+  tracker. The engine is built for batch 1, so frames go through one at a time.
+- Every 3 s the tracks of the last 2 minutes are re-linked (floor + colour); older people keep their number.
+- No RTSP: re-encoding 15 full-HD streams would need the CPU the pipeline needs.
+
+**Measured** (15 cameras, target 5 analyses per camera per second, scored like §7 but only on the frames
+each camera actually analysed):
+
+| | Offline, every frame (§7) | Live, 2 min | Live, 7 min |
+|---|---|---|---|
+| Analyses per camera per second | 30 | 3.8 | 3.3 |
+| Global IDF1, no linking | 0.169 (min 0–2) / 0.110 (min 2–7) | 0.118 (min 0–2) | 0.060 (min 2–7) |
+| Global IDF1, linked (floor + colour) | 0.509 / 0.369 | 0.306 | 0.197 (min 2–7) |
+| Re-link time, mean / max | – | 1.1 s / 2.2 s | 1.8 s / 5.5 s |
+
+**What this means:** the live store view works end to end, but at 3–4 analyses per second per camera the
+per-camera tracks break more, so store-wide IDs are clearly worse than offline, and "visitors so far"
+over-counts heavily (939 store-wide numbers seen ≥ 2 s in 7 minutes for 31 people). Re-linking also
+still slows down as a run gets longer, which lowers the analysis rate. Next steps: a batch-enabled
+engine (one detector call for all cameras), re-linking off the main loop, and the per-camera tracker.
+
 ## 6. Limits
 
 - **No cross-camera identities on real footage.** (A synthetic store is scored in §7.) CAVIAR numbers people separately in each view (e.g. `TwoEnterShop1`:

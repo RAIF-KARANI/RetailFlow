@@ -157,8 +157,9 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
         ii, jj = np.where((d <= radius) & (camv[:, None] < camv[None, :]))
         for i, j in zip(ii, jj):
             dsum.setdefault((keys[i], keys[j]), []).append(d[i, j])
-    # Common frames counted over ALL shared frames (also those where they were far apart):
-    common = _shared_frames(u)
+    # Common frames counted over ALL shared frames (also those where they were far apart),
+    # only for pairs that were ever near each other (the others can never link):
+    common = _shared_frames(u, dsum.keys())
     cand, app_cand = [], []
     for pair, ds in dsum.items():
         n_common = common.get(pair, 0)
@@ -230,17 +231,7 @@ def link(cams: dict[str, pd.DataFrame], fps: float, cfg: MTMCConfig = MTMCConfig
     return out[["camera", "track_id", "global_id", "start", "end", "n"]]
 
 
-def _shared_frames(u: pd.DataFrame) -> dict:
-    """(tracklet a, tracklet b) -> number of sampled frames both are on the floor (different cameras)."""
-    spans = u.groupby("key").frame.agg(["min", "max"])
-    frames = u.groupby("key").frame.apply(lambda s: set(s.tolist()))
-    keys = list(spans.index)
-    out = {}
-    mins, maxs = spans["min"].to_numpy(), spans["max"].to_numpy()
-    for i, a in enumerate(keys):
-        for j in range(len(keys)):
-            b = keys[j]
-            if a[0] >= b[0] or maxs[i] < mins[j] or maxs[j] < mins[i]:
-                continue
-            out[(a, b)] = len(frames[a] & frames[b])
-    return out
+def _shared_frames(u: pd.DataFrame, pairs) -> dict:
+    """(tracklet a, tracklet b) -> number of sampled frames both are on the floor, for `pairs`."""
+    frames = {k: set(g.tolist()) for k, g in u.groupby("key").frame}
+    return {(a, b): len(frames[a] & frames[b]) for a, b in pairs}

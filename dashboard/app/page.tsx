@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Camera, fmtTime, get } from "@/lib/api";
+import { Camera, fmtTime, get, StoreListItem } from "@/lib/api";
 
 // Overview: every camera with its customer totals over all sessions.
 export default function Home() {
   const [cams, setCams] = useState<Camera[] | null>(null);
+  const [stores, setStores] = useState<StoreListItem[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const load = () => get<Camera[]>("/api/cameras").then(setCams, (e) => setErr(String(e)));
+    const load = () => {
+      get<Camera[]>("/api/cameras").then(setCams, (e) => setErr(String(e)));
+      get<StoreListItem[]>("/api/stores").then(setStores, () => setStores([]));
+    };
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
@@ -26,6 +30,25 @@ export default function Home() {
         </p>
       </div>
       {err && <p className="error">Cannot reach the API: {err}</p>}
+      {stores.length > 0 && (
+        <div className="panel scroll">
+          <h2>Stores</h2>
+          <p className="muted">Several calibrated cameras on one floor, one store-wide number per person.</p>
+          <table>
+            <thead><tr><th>Store</th><th className="num">Cameras</th><th className="num">Runs</th><th></th></tr></thead>
+            <tbody>
+              {stores.map((s) => (
+                <tr key={s.store_id}>
+                  <td><Link href={`/stores/${encodeURIComponent(s.store_id)}`}>{s.store_id}</Link>
+                    <div className="muted">{s.description}</div></td>
+                  <td className="num">{s.cameras}</td><td className="num">{s.runs}</td>
+                  <td>{s.live && <span className="live-tag">live</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="panel scroll">
         <table>
           <thead>

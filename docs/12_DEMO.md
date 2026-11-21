@@ -80,6 +80,18 @@ What to point out on the dashboard:
 - Time axes are **video time**: the data has no real business hours, so none are invented.
 - The dwell table explains the 2 s visit rule. The heatmap appears when a session ends.
 
+## D. A whole store live (15 cameras, after Phase 8)
+
+Needs the SmartSpaces scene (`python tools/download_smartspaces.py`, 3.03 GB) and the services running.
+
+```powershell
+python run_store.py --store scenes/stores/smartspaces_071.json --seconds 300 --api http://127.0.0.1:8000
+```
+
+Open <http://localhost:3001>, section **Stores** → `smartspaces_071`: people now on the floor map with
+their store-wide number and 10 s trails, visitors so far, the people table and camera-to-camera moves.
+The store is synthetic, and live IDs are far from perfect (doc 11 §8): one person often gets several numbers.
+
 ## C. Reproduce the evaluation (hours of GPU time)
 
 ```powershell
@@ -90,7 +102,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 111 tests
+pytest -q                                                             # 116 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.
