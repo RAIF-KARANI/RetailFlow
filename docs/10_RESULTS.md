@@ -245,6 +245,10 @@ Full method and per-zone tables: [`05_ZONES_DWELL_HEATMAP.md`](05_ZONES_DWELL_HE
   other it flagged a mannequin, because the assistant's track kept breaking.
 - The shop-front camera is the weak case: walkway people hidden by the glass railing are under-detected.
 
+**Zone-to-zone transitions** (after Phase 8, doc 05 §8), error on steps between zones:
+corridor (dev) 22.4% → **9.3%**, shop front (test) 91.5% → **56.6%** (baseline → final). Most errors
+are steps lost when tracking breaks between two zones.
+
 ## 4. Streaming and performance (Phase 6)
 
 Full details: [`08_STREAMING_PERFORMANCE.md`](08_STREAMING_PERFORMANCE.md).

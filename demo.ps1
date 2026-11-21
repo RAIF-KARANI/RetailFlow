@@ -40,6 +40,7 @@ Start-Sleep 4
 try {
     Write-Host "3/4 Open http://localhost:3001/cameras/$((Get-Content $Scene -Raw | ConvertFrom-Json).camera_id) and pick the 'live' session." -ForegroundColor Green
     Start-Process "http://localhost:3001"
+    # Heads are always pixelated in the demo: the preview page shows people in a browser.
     $extra = @()
     if ($Preview) {
         $extra = @("--preview", "8090")
@@ -54,7 +55,7 @@ try {
     }
     Write-Host "4/4 Running the pipeline for $Seconds s (Ctrl+C to stop)..." -ForegroundColor Cyan
     & $py run.py --source "rtsp://127.0.0.1:8554/$Stream" --scene $Scene --out "outputs\demo\$Stream" `
-        --api http://127.0.0.1:8000 --duration $Seconds @extra | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|processed_frac|"skipped"|avg_proc_ms|Outputs'
+        --api http://127.0.0.1:8000 --duration $Seconds --blur-heads @extra | Select-String '"in"|"out"|keeps_up|realtime_factor|lag_slope|processed_frac|"skipped"|avg_proc_ms|Outputs'
 }
 finally {
     # Stop the simulator's whole process tree (only it, not other FFmpeg instances). With a venv,

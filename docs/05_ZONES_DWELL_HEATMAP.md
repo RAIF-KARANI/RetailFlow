@@ -193,6 +193,40 @@ hottest 10% of cells. `mass_ratio` = predicted / true person-seconds.
 4. **Crowds:** MOT20-01/02/03 heatmaps match well (r 0.81–0.87). MOT20-05 does not (0.23),
    for the same detection reason as its counts (doc 10 §2.5).
 
+## 8. Zone-to-zone movement (transition matrix)
+
+`retailflow/transitions.py`. Each track's zone visits, in order of their start, give its **path**
+(repeats of a zone in a row merged); every step A -> B counts once in the **transition matrix**
+("where people go next"). Visits have already passed the 2 s / 2 s debounce, so a person on a zone
+border does not produce A -> B -> A. Each run writes `transitions.csv`, the summary has
+`zone_transitions`, the API serves `/api/sessions/{id}/transitions` (customers only) and the
+dashboard shows the matrix.
+
+**Scored** with `python evaluate_transitions.py`: ground-truth tracks and the system's saved tracks go
+through the same zone rules; error = Σ |predicted − true| steps per clip and zone pair / Σ true steps.
+
+| Camera | Split | True steps | Baseline (YOLO26n, ByteTrack) | **Final system** |
+|---|---|---|---|---|
+| CAVIAR corridor (26 clips) | dev | 107 | 22.4% (85 found) | **9.3%** (97 found) |
+| CAVIAR shop front (26 clips) | test | 106 | 91.5% (11 found) | **56.6%** (48 found) |
+| MOT17-09 | dev | 2 | 100% (0 found) | 100% (0 found) |
+
+Final system, corridor, all 26 clips summed (true / predicted):
+
+| From \ to | far_end | corridor_mid | corridor_near |
+|---|---|---|---|
+| far_end | – | 30 / 27 | 0 / 0 |
+| corridor_mid | 25 / 22 | – | 29 / 25 |
+| corridor_near | 0 / 0 | 23 / 23 | – |
+
+- The errors are mostly **missed** steps: a path only exists within one track, so when tracking
+  breaks between two zones the step is lost. The shop front, where people are small and pass behind
+  each other, finds 48 of 106 (its zone visits are also the weakest result, §6).
+- MOT17-09 has only 2 true steps (two zones on a street), too few to score.
+- The test camera was not used to design anything here: the rule has no tuned parameters.
+- Live, on one corridor clip streamed in real time with 10% of frames skipped, 9 of the clip's 16 true
+  steps were found (14 offline). Skipped frames make tracks break more often.
+
 ## 7. Tests
 
 `tests/test_zones.py`: polygon test, seconds→frames, back-dated start, short touch ignored,

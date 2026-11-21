@@ -200,3 +200,7 @@ Format: **problem → cause → fix**. Newest at the bottom.
 - **Cause:** the API computed the length as analysed frames / fps; with skipped frames that is too short
   (46.3 s shown for about 67 s of video).
 - **Fix:** the summary also stores `video_frames` (stream position) and the API uses it.
+
+### Heads were not blurred in the live preview
+- **Cause:** `demo.ps1` did not pass `--blur-heads`; the blur itself works in the preview path.
+- **Fix:** the demo always passes it.

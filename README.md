@@ -16,7 +16,7 @@ and can be reproduced with the commands in [`docs/12_DEMO.md`](docs/12_DEMO.md).
 |---|---|---|
 | **1. Angled / side-view CCTV** | Counting on the **feet point** (bottom of the box), on the floor where the line is drawn, not the box centre that floats above it. Only static angled cameras used (camera motion measured). | Shop entrance: classic box-centre method **133% error**, feet point + band **19.4%** ([doc 04](docs/04_COUNTING_RELIABILITY.md)) |
 | **2. Reliable in/out counts, also when busy** | Band (hysteresis) line logic, detector/tracker chosen on dev data only, a `crowd` profile for dense cameras. | See the table below; busiest test set MOT20: **85.7% → 30.2%** error ([doc 10](docs/10_RESULTS.md)) |
-| **3. Zones, dwell, heatmaps** (if possible) | Debounced zone visits with dwell time, occupancy over time, person-seconds heatmaps, mannequin filter. | Corridor: time-in-zone error **15.5%**, heatmap correlation **0.93** with ground truth (measured on the Phase 3 tracks, [doc 05](docs/05_ZONES_DWELL_HEATMAP.md)) |
+| **3. Zones, dwell, heatmaps** (if possible) | Debounced zone visits with dwell time, occupancy over time, person-seconds heatmaps, mannequin filter, zone-to-zone transition matrix. | Corridor: time-in-zone error **15.5%**, heatmap correlation **0.93** with ground truth (measured on the Phase 3 tracks); zone-to-zone moves **9.3%** error ([doc 05](docs/05_ZONES_DWELL_HEATMAP.md)) |
 | Staff filtering | Rule: time spent in staff zones; flags are retroactive. | Works when tracking keeps one ID; found the assistant in 1 of 2 test clips ([doc 06](docs/06_STAFF_AND_PRIVACY.md)) |
 | Privacy | Anonymous events only, `--blur-heads`, ReID only in memory, people-free heatmap backgrounds. | [doc 06](docs/06_STAFF_AND_PRIVACY.md) |
 | Backend + dashboard | FastAPI + PostgreSQL + Next.js, Docker Compose, live sessions. | [doc 07](docs/07_BACKEND_DASHBOARD.md) |
@@ -76,7 +76,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (97 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (102 tests; the API integration test runs when the stack is up).
 
 ## How it works
 
@@ -125,7 +125,7 @@ scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             97 tests                                     docs/          everything above
+tests/             102 tests                                     docs/          everything above
 ```
 
 ## Data acknowledgements and licences

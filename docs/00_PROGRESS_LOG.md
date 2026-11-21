@@ -333,3 +333,8 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   dashboard; the preview page's "Stop run" ends the run cleanly (tested live: session closed,
   `stopped_by_user: true`, simulator stopped). The session length now comes from the stream position
   (`video_frames`), not from the number of analysed frames.
+- **Zone-to-zone transitions** (item 3 of the original plan): per-track zone paths → transition matrix,
+  in run outputs, API and dashboard. Error on steps: corridor 22.4% → 9.3%, shop front 91.5% → 56.6%
+  (baseline → final, doc 05 §8). **Learned:** most errors are steps lost at track breaks.
+- **Head blur in the demo:** the preview showed faces because `demo.ps1` never passed `--blur-heads`;
+  it now always does.

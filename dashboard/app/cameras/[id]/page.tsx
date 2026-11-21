@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import HeatmapCanvas from "@/components/HeatmapCanvas";
 import LineChart from "@/components/LineChart";
-import { CountRow, fmtTime, get, Heatmap, OccRow, Session, Summary } from "@/lib/api";
+import { CountRow, fmtTime, get, Heatmap, OccRow, Session, Summary, Transitions } from "@/lib/api";
 
 const ZONE_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
 
@@ -19,6 +19,7 @@ export default function CameraPage() {
   const [counts, setCounts] = useState<CountRow[]>([]);
   const [occ, setOcc] = useState<OccRow[]>([]);
   const [heat, setHeat] = useState<Heatmap | null>(null);
+  const [trans, setTrans] = useState<Transitions | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   // Session list (refreshes so a live session appears).
@@ -39,12 +40,13 @@ export default function CameraPage() {
     const load = async () => {
       try {
         const s = await get<Summary>(`/api/sessions/${sid}/summary`);
-        const [c, o] = await Promise.all([
+        const [c, o, tr] = await Promise.all([
           get<CountRow[]>(`/api/sessions/${sid}/counts?bucket_s=${bucket}`),
           get<OccRow[]>(`/api/sessions/${sid}/occupancy?bucket_s=${Math.max(1, bucket / 2)}`),
+          get<Transitions>(`/api/sessions/${sid}/transitions`),
         ]);
         if (stop) return;
-        setSummary(s); setCounts(c); setOcc(o); setErr(null);
+        setSummary(s); setCounts(c); setOcc(o); setTrans(tr); setErr(null);
         if (s.finished) get<Heatmap>(`/api/sessions/${sid}/heatmap`).then((h) => !stop && setHeat(h), () => setHeat(null));
         else setHeat(null);
       } catch (e) { if (!stop) setErr(String(e)); }
@@ -141,6 +143,38 @@ export default function CameraPage() {
           </div>
           <p className="muted">A visit counts after 2 s in the zone; leaving for under 2 s does not end it.</p>
         </div>
+        <div className="panel">
+          <h2>Where people go next</h2>
+          {trans && trans.zones.length > 1 ? (() => {
+            const max = Math.max(1, ...trans.matrix.flat());
+            return (<>
+              <div className="scroll">
+                <table className="matrix">
+                  <thead><tr><th>From \ to</th>{trans.zones.map((z) => <th key={z} className="num">{z}</th>)}</tr></thead>
+                  <tbody>
+                    {trans.zones.map((a, i) => (
+                      <tr key={a}><th scope="row">{a}</th>
+                        {trans.zones.map((b, j) => i === j ? <td key={b} className="num muted">–</td> : (
+                          <td key={b} className="num"
+                              style={{ background: `color-mix(in srgb, var(--accent) ${Math.round(55 * trans.matrix[i][j] / max)}%, transparent)` }}>
+                            {trans.matrix[i][j]}
+                          </td>))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted">
+                {trans.total_steps} moves between zones by {trans.people_moving_between_zones} of {trans.people_with_paths} tracked
+                people{trans.steps[0] ? `; most common: ${trans.steps[0].from} → ${trans.steps[0].to} (${trans.steps[0].n})` : ""}.
+                A move is lost when tracking breaks between two zones (doc 05).
+              </p>
+            </>);
+          })() : <p className="muted">Needs at least two zones.</p>}
+        </div>
+      </div>
+
+      <div className="grid two">
         <div className="panel">
           <h2>Heatmap</h2>
           {heat ? <HeatmapCanvas sessionId={sid} heat={heat} />

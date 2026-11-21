@@ -49,6 +49,15 @@ export type Summary = Totals & {
   zones: ZoneStats[];
 };
 
+export type Transitions = {
+  zones: string[];
+  matrix: number[][];            // matrix[from][to], people who went from one zone to the other
+  steps: { from: string; to: string; n: number }[];
+  total_steps: number;
+  people_with_paths: number;
+  people_moving_between_zones: number;
+};
+
 export type CountRow = { t: number; in: number; out: number };
 export type OccRow = { t: number } & Record<string, number>;
 export type Heatmap = { cell: number; floor: boolean; grid: number[][]; has_background: boolean; frame_size: [number, number] };

@@ -77,3 +77,30 @@ def dwell_stats(visits: list[dict], zones: list[str]) -> list[dict]:
                     "max_dwell_s": round(max(d), 1) if d else None,
                     "occupancy_now": now.get(z, 0)})
     return out
+
+
+def transition_table(visits: list[dict], zones: list[str]) -> dict:
+    """Zone-to-zone movement: how often people went from one zone to another.
+
+    Same rule as retailflow/transitions.py (kept in step by a test): each track's
+    visits in order of start give its path, repeats of a zone in a row are merged,
+    and every step A -> B counts once. Visits already passed the 2 s zone debounce.
+    """
+    by_track: dict = {}
+    for v in sorted(visits, key=lambda v: (v["track_id"], v["start"], v["end"])):
+        path = by_track.setdefault(v["track_id"], [])
+        if not path or path[-1] != v["zone"]:
+            path.append(v["zone"])
+    idx = {z: i for i, z in enumerate(zones)}
+    matrix = [[0] * len(zones) for _ in zones]
+    for path in by_track.values():
+        for a, b in zip(path, path[1:]):
+            if a in idx and b in idx:
+                matrix[idx[a]][idx[b]] += 1
+    steps = [{"from": a, "to": b, "n": matrix[idx[a]][idx[b]]}
+             for a in zones for b in zones if a != b and matrix[idx[a]][idx[b]]]
+    steps.sort(key=lambda s: -s["n"])
+    multi = sum(1 for p in by_track.values() if len(p) > 1)
+    return {"zones": zones, "matrix": matrix, "steps": steps,
+            "total_steps": sum(s["n"] for s in steps),
+            "people_with_paths": len(by_track), "people_moving_between_zones": multi}

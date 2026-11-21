@@ -17,6 +17,7 @@ Outputs written to `out_dir`:
                 Saving raw tracks lets evaluate.py re-count offline with
                 different settings WITHOUT re-running the detector.
   events.csv    line crossings, zone visits, staff / static flags
+  transitions.csv  zone-to-zone moves of customers (from_zone, to_zone, people)
   heatmap.npy   raw person-seconds grid;  heatmap.png  rendered over a people-free background
   summary.json  configuration, counts, zone summary and timing for this run
   annotated.mp4 optional, with --save-video (heads blurred with --blur-heads)
@@ -34,6 +35,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 
 from retailflow import draw
 from retailflow.config import Scene
@@ -45,6 +47,7 @@ from retailflow.privacy import blur_heads
 from retailflow.sources import FrameSource
 from retailflow.staff import StaffFilter
 from retailflow.static_filter import is_static
+from retailflow.transitions import transition_counts
 from retailflow.zones import ZoneConfig, ZoneTracker
 
 BACKGROUND_SAMPLES = 15      # frames kept for the median background
@@ -309,6 +312,17 @@ class Pipeline:
         if show:
             cv2.destroyAllWindows()
 
+        # Zone-to-zone movement of customers (staff and static tracks left out).
+        not_customer = set(staff.staff) | self.static_ids
+        visits_df = pd.DataFrame([v.__dict__ for v in zones.visits if v.track_id not in not_customer],
+                                 columns=["track_id", "zone", "start_frame", "end_frame", "dwell_s", "truncated"])
+        steps = transition_counts(visits_df)
+        with open(self.out_dir / "transitions.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["from_zone", "to_zone", "people"])
+            for (a, b), k in sorted(steps.items(), key=lambda x: -x[1]):
+                w.writerow([a, b, k])
+
         np.save(self.out_dir / "heatmap.npy", heat.grid)
         background = median_background(bg_frames) if bg_frames else None
         if background is not None:
@@ -334,6 +348,7 @@ class Pipeline:
             "staff_track_ids": sorted(staff.staff),
             "static_track_ids": sorted(self.static_ids),
             "zone_visits": visits_n,
+            "zone_transitions": {f"{a} -> {b}": k for (a, b), k in steps.most_common()},
             "blur_heads": self.blur,
             "unique_track_ids": len(ids_seen),
             "avg_proc_ms": round(sum(proc_ms) / max(n, 1), 2),

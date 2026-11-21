@@ -37,7 +37,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from app.analytics import counts_series, dwell_stats, occupancy_series, pair_visits
+from app.analytics import counts_series, dwell_stats, occupancy_series, pair_visits, transition_table
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://retailflow:retailflow@localhost:5432/retailflow")
 EVENT_TYPES = {"line_cross", "zone_enter", "zone_exit", "staff_flag", "static_flag"}
@@ -288,6 +288,14 @@ def session_occupancy(sid: uuid.UUID, bucket_s: float = Query(5.0, gt=0)):
     with connect() as conn:
         s = _session(conn, sid)
         return occupancy_series(_visits(conn, s), _zones(s), bucket_s, _end_s(conn, s))
+
+
+@app.get("/api/sessions/{sid}/transitions")
+def session_transitions(sid: uuid.UUID):
+    """Zone-to-zone movement of customers (staff and static tracks excluded)."""
+    with connect() as conn:
+        s = _session(conn, sid)
+        return transition_table(_visits(conn, s), _zones(s))
 
 
 @app.get("/api/sessions/{sid}/heatmap")

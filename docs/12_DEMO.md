@@ -22,6 +22,7 @@ Look at `outputs/demo/front/`:
 - `events.csv`: every crossing, zone visit (with dwell) and staff/static flag;
 - `summary.json`: counts, customer counts (staff removed), timing;
 - `heatmap.png`: where people spent time, over a people-free background.
+- `transitions.csv`: how many people moved from each zone to each other zone.
 
 | Demo clip | Predicted in / out | Ground truth in / out |
 |---|---|---|
@@ -61,7 +62,8 @@ then run `python run.py --source my_video.mp4 --scene scenes/my_cam.json`. `--du
 <http://127.0.0.1:8090>: the running pipeline's own annotated frames (boxes, feet points, counting line,
 zones, live heatmap, IN/OUT so far) as an MJPEG stream, about 10 frames per second at 960 px. No second
 model runs. Frames are only drawn while the page is open, and the server listens on this computer only
-(127.0.0.1), because the preview shows people. Add `--blur-heads` to pixelate heads in it.
+(127.0.0.1), because the preview shows people. `demo.ps1` always pixelates heads (`--blur-heads`); with
+`run.py --preview` add `--blur-heads` yourself.
 On the dashboard, a live session started with the preview shows a **▶ Watch live video** button that opens
 this page. The page's **■ Stop run** button ends the run cleanly: outputs are written, the summary goes to
 the API and the session is closed on the dashboard (Ctrl+C in the terminal also stops it, but leaves the
@@ -88,7 +90,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 97 tests
+pytest -q                                                             # 102 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.
