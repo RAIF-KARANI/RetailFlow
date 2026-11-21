@@ -285,3 +285,7 @@ Synthetic store, 15 cameras, minutes 2–7 (settings chosen on minutes 0–2), d
 0.110 (no linking) → 0.281 (floor linking) → **0.369** (+ colour matching, in memory only); with
 ground-truth per-camera tracks the floor linking alone reaches 0.825 on dev, so per-camera tracking breaks
 are the main loss.
+
+**Store zones** (synthetic store, 9 zones, test minutes 2–7, doc 11 §8): people-in-zone error 0.85 per second offline
+(1.40 live), time in zones 24.8% (42.9%), zone-to-zone moves 30.4% (42.7%); visit counts about 2× too high because of
+split IDs.

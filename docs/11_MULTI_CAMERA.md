@@ -235,10 +235,26 @@ The dashboard draws either under the map (Blueprint / Floor photo / Grid).
 Nine store zones were drawn on it in floor metres (`scenes/stores/smartspaces_071.json`; editor:
 `tools/setup_store_zones.py`; `tools/register_store.py` sends zones and floor images to the API). Per zone, from
 each store-wide person's floor position once per second and the same 2 s rule as camera zones: people now, visits,
-mean/median stay, and **zone-to-zone moves across the whole store**. In a 2-minute live run the moves only
-connect neighbouring zones (e.g. entrance ↔ checkouts 11 / 11, storage room ↔ drinks fridges 8 / 10, none from the
-entrance straight to the storage room), a plausibility check; there is no ground truth for these zones, and visit
-counts are inflated where one person has several numbers.
+mean/median stay, and **zone-to-zone moves across the whole store**.
+
+**Scored against ground truth** (`python evaluate_store_zones.py`): the dataset gives every person's floor position,
+so the true people (one ID across cameras, median position once per second) go through exactly the same zone code
+(`store_live.store_zone_analysis`). Zones were drawn from the floor photo, not tuned on these numbers. Test minutes 2–7:
+
+| | Offline (every frame, floor + colour) | Live run (15 cameras, 4.9 analyses/s) |
+|---|---|---|
+| People in a zone, error per second (zones hold 2.9 on average) | **0.85** | 1.40 |
+| Time in zones (person-seconds), WAPE | **24.8%** | 42.9% |
+| Zone-to-zone moves (382 true), WAPE | **30.4%** (462 found) | 42.7% (503 found) |
+| Visits (480 true) | 940 | 1,091 |
+
+- Occupancy and time in zone are not hurt by one person getting several numbers one after another, and they are
+  the most reliable store figures; the storage room (0.2% time error offline) and snack aisles are close, the
+  entrance and freezers are too high. Where they are too high, one person is counted twice at the same moment:
+  two cameras' views of them were not joined.
+- Visits are about twice the truth, with shorter stays: a split person turns one visit into several. Visit counts
+  and stay times per zone should not be quoted until the cross-camera IDs improve.
+- The move matrix is closer than visits (30% offline) because a split rarely changes which zone comes next.
 
 **What this meant before the batch engine:** the live store view worked end to end, but at 3–4 analyses per second per camera the
 per-camera tracks break more, so store-wide IDs are clearly worse than offline, and "visitors so far"

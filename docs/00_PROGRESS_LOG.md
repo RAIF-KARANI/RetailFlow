@@ -357,3 +357,6 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
 - **Store layout and zones:** a top-down floor plan stitched from the 15 calibrated cameras (photo and blueprint),
   drawn under the dashboard map, with 9 store zones in metres: people now, visits, stay times and zone-to-zone moves
   across the whole store (store-level movement from the original plan).
+- **Store zones scored:** ground-truth floor positions through the same zone code. Offline: 0.85 people error per
+  zone per second, time in zones 24.8%, moves 30.4%; live 1.40 / 42.9% / 42.7%; visits about 2× too high (split IDs).
+  **Learned:** occupancy and time-in-zone survive ID splits; visit counts do not.

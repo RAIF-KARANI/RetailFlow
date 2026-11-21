@@ -265,40 +265,14 @@ class StoreLinker:
                 "heatmap": self._heatmap(allr), **self._zone_stats(allr)}
 
     def _zone_stats(self, allr: pd.DataFrame) -> dict:
-        """Store zones: people now, visits, dwell and zone-to-zone moves of store-wide people.
-
-        Uses each person's floor position once per second (median of the cameras that see
-        their feet) and the same 2 s enter / 2 s leave rule as camera zones (zones.py).
-        """
-        zones = list(self.store.zones)
-        if not zones:
+        """Store zones: people now, visits, dwell and zone-to-zone moves of store-wide people
+        (each person's floor position once per second, median of the cameras that see their feet)."""
+        if not self.store.zones:
             return {}
         u = allr[allr.usable]
-        pos = u.groupby(["sec", "person"])[["xw", "yw"]].median()
-        zt = ZoneTracker(zones, 1.0, ZoneConfig())
-        by_sec = {s: g.droplevel(0) for s, g in pos.groupby(level=0)} if len(pos) else {}
-        if by_sec:
-            for sec in range(min(by_sec), max(by_sec) + 1):
-                g = by_sec.get(sec)
-                pts = {} if g is None else {int(p): (float(r.xw), float(r.yw)) for p, r in g.iterrows()}
-                zt.update(sec, pts)
-        occupancy = zt.occupancy()                    # visits still open = people in the zone now
-        zt.finish()
-        visits = pd.DataFrame([v.__dict__ for v in zt.visits],
-                              columns=["track_id", "zone", "start_frame", "end_frame", "dwell_s", "truncated"])
-        names = [z.name for z in zones]
-        rows = []
-        for z in names:
-            v = visits[visits.zone == z]
-            rows.append({"zone": z, "now": int(occupancy.get(z, 0)), "visits": int(len(v)),
-                         "mean_dwell_s": round(float(v.dwell_s.mean()), 1) if len(v) else None,
-                         "median_dwell_s": round(float(v.dwell_s.median()), 1) if len(v) else None})
-        steps = transition_counts(visits)
-        idx = {z: i for i, z in enumerate(names)}
-        m = [[0] * len(names) for _ in names]
-        for (a, b), k in steps.items():
-            m[idx[a]][idx[b]] += k
-        return {"zones": rows, "zone_moves": {"zones": names, "matrix": m}}
+        pos = u.groupby(["sec", "person"])[["xw", "yw"]].median().reset_index()
+        z = store_zone_analysis(pos, list(self.store.zones))
+        return {"zones": z["rows"], "zone_moves": {"zones": z["names"], "matrix": z["moves"]}}
 
     def _heatmap(self, allr: pd.DataFrame) -> dict:
         """Person-seconds on the floor, counted once per store-wide person per second.
@@ -320,6 +294,44 @@ class StoreLinker:
         nz = np.argwhere(grid > 0)
         return {"cell": cell, "x0": x0, "y0": y0, "rows": rows, "cols": cols,
                 "total_s": int(grid.sum()), "cells": [[int(r), int(c), int(grid[r, c])] for r, c in nz]}
+
+
+def store_zone_analysis(pos: pd.DataFrame, zones: list) -> dict:
+    """Zones of a store from people's floor positions once per second.
+
+    `pos`: columns sec, person, xw, yw (one row per person per second). Uses the same
+    2 s enter / 2 s leave rule as camera zones (zones.py), at 1 update per second.
+    Shared by the live store state and by evaluate_store_zones.py (ground truth goes
+    through exactly the same code). Returns names, rows (now / visits / stays per zone),
+    moves (zone-to-zone matrix), visits (table) and occupancy (people per zone per second).
+    """
+    names = [z.name for z in zones]
+    zt = ZoneTracker(zones, 1.0, ZoneConfig())
+    occ_rows = []
+    if len(pos):
+        by_sec = {int(sec): g for sec, g in pos.groupby("sec")}
+        for sec in range(min(by_sec), max(by_sec) + 1):
+            g = by_sec.get(sec)
+            pts = {} if g is None else {int(p): (float(x), float(y)) for p, x, y in zip(g.person, g.xw, g.yw)}
+            zt.update(sec, pts)
+            o = zt.occupancy()
+            occ_rows.append([sec] + [o[n] for n in names])
+    occupancy_now = zt.occupancy()                # visits still open = people in the zone now
+    zt.finish()
+    visits = pd.DataFrame([v.__dict__ for v in zt.visits],
+                          columns=["track_id", "zone", "start_frame", "end_frame", "dwell_s", "truncated"])
+    rows = []
+    for n in names:
+        v = visits[visits.zone == n]
+        rows.append({"zone": n, "now": int(occupancy_now.get(n, 0)), "visits": int(len(v)),
+                     "mean_dwell_s": round(float(v.dwell_s.mean()), 1) if len(v) else None,
+                     "median_dwell_s": round(float(v.dwell_s.median()), 1) if len(v) else None})
+    idx = {n: i for i, n in enumerate(names)}
+    m = [[0] * len(names) for _ in names]
+    for (a, b), k in transition_counts(visits).items():
+        m[idx[a]][idx[b]] += k
+    occupancy = pd.DataFrame(occ_rows, columns=["sec", *names]).set_index("sec")
+    return {"names": names, "rows": rows, "moves": m, "visits": visits, "occupancy": occupancy}
 
 
 # ---- linking in its own process (run_store.py) ---------------------------------

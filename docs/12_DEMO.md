@@ -111,7 +111,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 121 tests
+pytest -q                                                             # 123 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.

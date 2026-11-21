@@ -51,6 +51,8 @@ What is **not** solved, in plain words:
 - **Cross-camera identities** (synthetic store, 15 cameras): floor linking + colour matching lift global IDF1 from
   0.110 to 0.369, but people are still split into many IDs (169 seen ≥ 10 s for 31 true); a steadier per-camera
   tracker and a learned re-identification model are the next steps.
+- **Store zones** are scored against ground truth: people per zone are close (error 0.85 per second offline) and
+  zone-to-zone moves are 30% off, but visit counts are about 2× too high because of split IDs.
 - **Staff filtering** depends on the tracker keeping one ID. No public dataset labels staff, so it is not scored.
 
 ## Quick start (Windows, PowerShell)
@@ -80,7 +82,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (121 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (123 tests; the API integration test runs when the stack is up).
 
 ## How it works
 
@@ -129,7 +131,7 @@ scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             121 tests                                     docs/          everything above
+tests/             123 tests                                     docs/          everything above
 ```
 
 ## Data acknowledgements and licences
