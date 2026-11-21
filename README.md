@@ -133,6 +133,7 @@ tests/             102 tests                                     docs/          
 - **CAVIAR**: EC Funded CAVIAR project/IST 2001 37540 (<https://homepages.inf.ed.ac.uk/rbf/CAVIAR/>), CC BY-SA.
 - **MOT17 / MOT20**: MOTChallenge (<https://motchallenge.net>), CC BY-NC-SA 3.0. Non-commercial research use.
 - **MEVA**: Kitware Inc. and IARPA (<https://mevadata.org>), CC BY 4.0. Corona et al., WACV 2021. Used for the one-hour live test.
+- **NVIDIA PhysicalAI-SmartSpaces** (<https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces>), CC BY 4.0. One synthetic retail scene for multi-camera work.
 - Datasets are downloaded by the scripts, never redistributed in this repository. Images in `docs/img`
   are annotated frames from these datasets, with heads pixelated.
 - Models: Ultralytics YOLO26 (AGPL-3.0). Note this licence before any commercial deployment.

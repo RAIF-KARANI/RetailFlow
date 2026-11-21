@@ -17,6 +17,7 @@ retail CCTV. No overhead (top-down) views and no moving cameras.
 | MOT17 (static train sequences 02, 04, 09) | counting and tracking in medium/busy scenes | static, elevated, angled street/square views | 5.6 GB zip, ~1 GB extracted for 3 sequences | CC BY-NC-SA 3.0 (MOTChallenge) |
 | MOT20 (train sequences) | very busy scenes | static, elevated, angled | 4.8 GB zip (Phase 3) | CC BY-NC-SA 3.0 (MOTChallenge) |
 | MEVA (one camera, one hour) | long real-footage test | static elevated indoor entrance camera | 914 MB (12 clips) | CC BY 4.0 (Kitware Inc. and IARPA) |
+| NVIDIA PhysicalAI-SmartSpaces (one retail scene) | multi-camera: cross-camera IDs, floor positions | 15 synchronised angled cameras in a **synthetic** store | 3.03 GB (scene_071) | CC BY 4.0 (NVIDIA) |
 | MMPTRACK | multi-camera (only if feasible) | calibrated multi-view, includes retail | not downloaded (no public link; size not published) | Research use only; signed user agreement e-mailed to the organisers |
 
 ## 1. CAVIAR
@@ -112,6 +113,34 @@ Picking the camera used one 3 MB slice of a midday clip from each camera (about 
 
 Attribution: MEVA by Kitware Inc. and IARPA, CC BY 4.0. Corona et al., "MEVA: A Large-Scale
 Multiview, Multimodal Video Dataset for Activity Detection", WACV 2021.
+
+## 6. NVIDIA PhysicalAI-SmartSpaces (multi-camera, after Phase 8)
+
+Source: <https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces>, **CC BY 4.0**, no account
+needed. Synthetic indoor scenes (NVIDIA Omniverse, labelled automatically) for multi-camera tracking.
+The 2024 release has 90 scenes (217 GB); scenes 071-080 of its test split are a **retail store**
+(aisles, checkouts, freezers, a storage room), 16 cameras each, about 13.3 minutes at 1920x1080 / 30 fps,
+3.1-4.2 GB per scene. Ground truth is included: per camera and frame, a box, an **ID that is the
+same in every camera**, and the person's floor position; plus calibration per camera.
+
+```powershell
+python tools/download_smartspaces.py --list     # files and sizes only
+python tools/download_smartspaces.py            # scene_071: 33 files, 3.03 GB
+```
+
+Downloaded: `scene_071` only, without the camera the card marks as corrupted (`camera_0649`) and
+without the 2025-format ground-truth JSON (the 2024 text file has the same boxes and IDs).
+Checked after download: 15 videos of 799.8 s (24,000 frames); ground truth has 1,371,078 boxes of
+**31 people**, every one of them seen by 2 or more cameras (up to 13), about 4 people per camera per frame.
+Why one scene: enough to build and score cross-camera tracking; the other retail scenes are the same
+store with other people. Caveat: synthetic people, so results show whether the **method** works, not
+real-world accuracy.
+
+Not downloaded (checked): the 2025/2026 releases (warehouses, a lab and a hospital, no retail;
+up to 3.3 TB with depth maps); MEVID (real cross-camera identities from MEVA, CC BY 4.0) would need
+its 13.97 GB test package of person crops; skipped for now.
+
+Attribution: NVIDIA, PhysicalAI-SmartSpaces (AI City Challenge multi-camera tracking data), CC BY 4.0.
 
 ## Verify
 
