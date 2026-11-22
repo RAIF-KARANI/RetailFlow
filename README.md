@@ -53,6 +53,8 @@ What is **not** solved, in plain words:
   tracker and a learned re-identification model are the next steps.
 - **Store zones** are scored against ground truth (test minutes, offline): people per zone 0.59 error per second,
   time in zones 12.4% off, moves 20.2%, visits 29.6% (57.7% live). People seen for under 5 s are not counted.
+- **People in view / total people** per camera: in view is close (0.64 people error on test); the total is an
+  estimate that over-counts when tracking breaks (test 61.7% off, from 312% when every track ID counts).
 - **Staff filtering** depends on the tracker keeping one ID. No public dataset labels staff, so it is not scored.
 
 ## Quick start (Windows, PowerShell)
@@ -82,7 +84,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (124 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (128 tests; the API integration test runs when the stack is up).
 
 ## How it works
 

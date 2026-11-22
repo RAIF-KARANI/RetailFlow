@@ -76,6 +76,21 @@ def test_staff_and_static_flags_are_excluded_retroactively(camera):
     assert cams[camera]["cust_in"] == 1 and cams[camera]["sessions"] == 1
 
 
+def test_people_in_view_and_total(camera):
+    sid = call("POST", "/api/sessions", {"camera_id": camera, "source": "clip.mp4", "video_fps": 10})["session_id"]
+    call("POST", f"/api/sessions/{sid}/people", [{"t": 0, "now": 2.0, "total": 0},
+                                                 {"t": 1, "now": 3.0, "total": 1},
+                                                 {"t": 2, "now": 1.0, "total": 2}])
+    s = call("GET", f"/api/sessions/{sid}/summary")
+    assert s["people_now"] == 1.0 and s["people_total"] == 2               # live: latest second
+    rows = call("GET", f"/api/sessions/{sid}/people?bucket_s=2")
+    assert rows == [{"t": 0.0, "now": 2.5, "total": 1}, {"t": 2.0, "now": 1.0, "total": 2}]
+    call("POST", f"/api/sessions/{sid}/finish", {"summary": {"frames": 30, "people_total": 1,
+                                                             "people_now_mean": 2.0}})
+    s = call("GET", f"/api/sessions/{sid}/summary")
+    assert s["people_now"] is None and s["people_total"] == 1 and s["people_now_mean"] == 2.0
+
+
 def test_rejects_unknown_event_type(camera):
     sid = call("POST", "/api/sessions", {"camera_id": camera, "source": "x"})["session_id"]
     with pytest.raises(urllib.error.HTTPError) as e:

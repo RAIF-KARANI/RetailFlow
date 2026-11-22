@@ -6,7 +6,9 @@ Flow:
   1. PUT  /api/cameras/{id}          register the camera's scene (line, zones...)
   2. POST /api/sessions              start a session for this source
   3. POST /api/sessions/{id}/events  batches of events (every `batch` events or `flush_s` seconds)
-  4. POST /api/sessions/{id}/finish  summary, heatmap grid and people-free background
+  4. POST /api/sessions/{id}/people  people in view / total people, one sample per second
+                                     (sent with the event batches)
+  5. POST /api/sessions/{id}/finish  summary, heatmap grid and people-free background
 
 If the API is unreachable, events stay in memory and are retried after
 `retry_s` seconds (up to `max_buffer`, after which the oldest are dropped and
@@ -59,6 +61,7 @@ class ApiEventSender:
         self.batch, self.flush_s, self.max_buffer, self.retry_s = batch, flush_s, max_buffer, retry_s
         self._retry_at = 0.0
         self.buffer: list[dict] = []
+        self.people_buffer: list[dict] = []
         self.sent = 0
         self.dropped = 0
         self._last_flush = time.monotonic()
@@ -77,9 +80,24 @@ class ApiEventSender:
         if due and now >= self._retry_at:   # after a failure, wait retry_s before trying again
             self.flush()
 
+    def people(self, sample: dict) -> None:
+        """One people sample per second of video (retailflow.people); sent with the next flush."""
+        self.people_buffer.append(sample)
+        del self.people_buffer[:-self.max_buffer]
+        if time.monotonic() - self._last_flush >= self.flush_s and time.monotonic() >= self._retry_at:
+            self.flush()
+
     def flush(self) -> bool:
         """Try to send everything buffered. Returns False (and keeps the events) on failure."""
         self._last_flush = time.monotonic()
+        if self.people_buffer:
+            try:
+                _request("POST", f"{self.base}/api/sessions/{self.session_id}/people", self.people_buffer)
+                self.people_buffer = []
+            except ApiError as err:
+                print(f"[sender] {err}; keeping {len(self.people_buffer)} people samples")
+                self._retry_at = time.monotonic() + self.retry_s
+                return False
         while self.buffer:
             chunk = self.buffer[:1000]
             try:

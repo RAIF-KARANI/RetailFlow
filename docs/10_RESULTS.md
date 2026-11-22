@@ -249,6 +249,20 @@ Full method and per-zone tables: [`05_ZONES_DWELL_HEATMAP.md`](05_ZONES_DWELL_HE
 corridor (dev) 22.4% → **9.3%**, shop front (test) 91.5% → **56.6%** (baseline → final). Most errors
 are steps lost when tracking breaks between two zones.
 
+**People in view and total people** (after Phase 8, `retailflow/people.py`, scored by
+`python evaluate_people.py` on the final tracks; the 3 s rule was chosen on dev only):
+
+| Split | Sequences | People in view: true mean | People in view: MAE | Total people: true | All track IDs | Track IDs ≥ 3 s (used) |
+|---|---|---|---|---|---|---|
+| dev | 29 | 6.16 | 1.60 | 406 | 954 (135.0% WAPE) | **463 (29.3%)** |
+| test | 26 | 1.40 | 0.64 | 133 | 548 (312.0%) | **205 (61.7%)** |
+
+Dev WAPE by minimum seconds: 0 s 135.0%, 1 s 58.9%, 2 s 35.2%, **3 s 29.3%**, 5 s 34.5%. On test, 5 s
+would have been better (37.6%), but test is not used for choosing. Total people stays an over-count
+whenever the tracker gives one person several long IDs (the CAVIAR shop front, where people disappear
+behind the glass railing, is the worst case), so the dashboard labels it an estimate. People in view
+does not depend on IDs.
+
 ## 4. Streaming and performance (Phase 6)
 
 Full details: [`08_STREAMING_PERFORMANCE.md`](08_STREAMING_PERFORMANCE.md).

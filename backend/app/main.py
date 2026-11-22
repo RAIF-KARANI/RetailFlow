@@ -5,6 +5,7 @@ Write side (used by retailflow/sender.py):
   DELETE /api/cameras/{camera_id}          remove a camera and all its data
   POST /api/sessions                       start a session (one pipeline run)
   POST /api/sessions/{id}/events           append a batch of events
+  POST /api/sessions/{id}/people           people in view / total people per second
   POST /api/sessions/{id}/finish           summary + heatmap + background image
 
 Read side (used by the dashboard):
@@ -13,6 +14,7 @@ Read side (used by the dashboard):
   GET  /api/sessions/{id}/summary          IN/OUT, staff/static removed, dwell per zone
   GET  /api/sessions/{id}/counts           IN/OUT per time bucket
   GET  /api/sessions/{id}/occupancy        people per zone per time bucket
+  GET  /api/sessions/{id}/people           people in view and total people per time bucket
   GET  /api/sessions/{id}/heatmap          person-seconds grid
   GET  /api/sessions/{id}/background.png   people-free background for the heatmap
 
@@ -80,6 +82,12 @@ class EventIn(BaseModel):
     staff: bool = False
 
 
+class PeopleIn(BaseModel):
+    t: float
+    now: float = Field(ge=0)
+    total: int = Field(ge=0)
+
+
 class HeatmapIn(BaseModel):
     cell: float
     floor: bool = False
@@ -133,6 +141,18 @@ def _visits(conn, s: dict) -> list[dict]:
                         "WHERE session_id = %s AND type IN ('zone_enter', 'zone_exit') ORDER BY ts, id",
                         (s["session_id"],)).fetchall()
     return pair_visits(rows, _end_s(conn, s))
+
+
+def _people(conn, s: dict) -> dict:
+    """Latest people in view and total people. A finished session's total is the final one
+    (staff / static objects found at the very end are left out)."""
+    r = conn.execute("SELECT now, total FROM people_samples WHERE session_id = %s ORDER BY ts DESC LIMIT 1",
+                     (s["session_id"],)).fetchone()
+    summ = s["summary"] or {}
+    total = summ.get("people_total", r["total"] if r else None)
+    return {"people_now": None if (r is None or s["finished_at"] is not None) else round(float(r["now"]), 1),
+            "people_total": total, "people_now_mean": summ.get("people_now_mean"),
+            "people_min_s": summ.get("people_min_s", 3.0)}
 
 
 def _source_name(source: str) -> str:
@@ -205,6 +225,18 @@ def add_events(sid: uuid.UUID, events: list[EventIn]):
     return {"inserted": len(events)}
 
 
+@app.post("/api/sessions/{sid}/people")
+def add_people(sid: uuid.UUID, samples: list[PeopleIn]):
+    with connect() as conn:
+        _session(conn, sid)
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO people_samples (session_id, ts, now, total) VALUES (%s, %s, %s, %s) "
+                "ON CONFLICT (session_id, ts) DO UPDATE SET now = EXCLUDED.now, total = EXCLUDED.total",
+                [(sid, x.t, x.now, x.total) for x in samples])
+    return {"inserted": len(samples)}
+
+
 @app.post("/api/sessions/{sid}/finish")
 def finish_session(sid: uuid.UUID, body: FinishIn):
     with connect() as conn:
@@ -269,7 +301,7 @@ def session_summary(sid: uuid.UUID):
         visits = _visits(conn, s)
         return {"session_id": str(sid), "camera_id": s["camera_id"], "source": s["source"],
                 "video_seconds": round(end_s, 1), "finished": s["finished_at"] is not None,
-                "run_info": s["run_info"], **_totals(conn, sid),
+                "run_info": s["run_info"], **_totals(conn, sid), **_people(conn, s),
                 "zones": dwell_stats(visits, _zones(s)),
                 "line": s["scene"].get("line"), "timeline": "video time (seconds from start of source)"}
 
@@ -288,6 +320,17 @@ def session_occupancy(sid: uuid.UUID, bucket_s: float = Query(5.0, gt=0)):
     with connect() as conn:
         s = _session(conn, sid)
         return occupancy_series(_visits(conn, s), _zones(s), bucket_s, _end_s(conn, s))
+
+
+@app.get("/api/sessions/{sid}/people")
+def session_people(sid: uuid.UUID, bucket_s: float = Query(5.0, gt=0)):
+    """People in view (mean over the bucket) and total people so far (at the bucket's end)."""
+    with connect() as conn:
+        _session(conn, sid)
+        rows = conn.execute("""SELECT floor(ts / %(b)s) * %(b)s AS t, avg(now) AS now, (array_agg(total ORDER BY ts DESC))[1] AS total
+                               FROM people_samples WHERE session_id = %(s)s GROUP BY 1 ORDER BY 1""",
+                            {"b": bucket_s, "s": sid}).fetchall()
+    return [{"t": float(r["t"]), "now": round(float(r["now"]), 2), "total": int(r["total"])} for r in rows]
 
 
 @app.get("/api/sessions/{sid}/transitions")

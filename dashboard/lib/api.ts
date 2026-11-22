@@ -47,7 +47,13 @@ export type Summary = Totals & {
   finished: boolean;
   run_info: Record<string, unknown>;
   zones: ZoneStats[];
+  people_now: number | null;       // live sessions only: people in view in the last second
+  people_total: number | null;     // different track IDs seen >= people_min_s (an estimate)
+  people_now_mean: number | null;  // finished sessions: average people in view
+  people_min_s: number;
 };
+
+export type PeopleRow = { t: number; now: number; total: number };
 
 export type Transitions = {
   zones: string[];

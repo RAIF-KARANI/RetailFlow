@@ -55,6 +55,17 @@ WHERE NOT EXISTS (
       AND f.type IN ('staff_flag', 'static_flag')
 );
 
+-- People counts of a session, one row per second of video (retailflow/people.py):
+-- people in view (mean over the second) and total people so far (track IDs seen >= 3 s,
+-- staff and static objects left out). Counts only.
+CREATE TABLE IF NOT EXISTS people_samples (
+    session_id UUID NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
+    ts         DOUBLE PRECISION NOT NULL,             -- start of the second, session timeline
+    now        REAL NOT NULL,
+    total      INTEGER NOT NULL,
+    PRIMARY KEY (session_id, ts)
+);
+
 -- Person-seconds grid of a session, plus a people-free background image.
 CREATE TABLE IF NOT EXISTS heatmaps (
     session_id UUID PRIMARY KEY REFERENCES sessions (session_id) ON DELETE CASCADE,

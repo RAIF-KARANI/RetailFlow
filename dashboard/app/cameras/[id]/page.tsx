@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import HeatmapCanvas from "@/components/HeatmapCanvas";
 import LineChart from "@/components/LineChart";
-import { CountRow, fmtTime, get, Heatmap, OccRow, Session, Summary, Transitions } from "@/lib/api";
+import { CountRow, fmtTime, get, Heatmap, OccRow, PeopleRow, Session, Summary, Transitions } from "@/lib/api";
 
 const ZONE_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
 
@@ -18,6 +18,7 @@ export default function CameraPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [counts, setCounts] = useState<CountRow[]>([]);
   const [occ, setOcc] = useState<OccRow[]>([]);
+  const [people, setPeople] = useState<PeopleRow[]>([]);
   const [heat, setHeat] = useState<Heatmap | null>(null);
   const [trans, setTrans] = useState<Transitions | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -40,13 +41,14 @@ export default function CameraPage() {
     const load = async () => {
       try {
         const s = await get<Summary>(`/api/sessions/${sid}/summary`);
-        const [c, o, tr] = await Promise.all([
+        const [c, o, tr, pp] = await Promise.all([
           get<CountRow[]>(`/api/sessions/${sid}/counts?bucket_s=${bucket}`),
           get<OccRow[]>(`/api/sessions/${sid}/occupancy?bucket_s=${Math.max(1, bucket / 2)}`),
           get<Transitions>(`/api/sessions/${sid}/transitions`),
+          get<PeopleRow[]>(`/api/sessions/${sid}/people?bucket_s=${Math.max(1, bucket / 2)}`),
         ]);
         if (stop) return;
-        setSummary(s); setCounts(c); setOcc(o); setTrans(tr); setErr(null);
+        setSummary(s); setCounts(c); setOcc(o); setTrans(tr); setPeople(pp); setErr(null);
         if (s.finished) get<Heatmap>(`/api/sessions/${sid}/heatmap`).then((h) => !stop && setHeat(h), () => setHeat(null));
         else setHeat(null);
       } catch (e) { if (!stop) setErr(String(e)); }
@@ -93,6 +95,19 @@ export default function CameraPage() {
 
       {summary && (
         <div className="grid kpis">
+          {summary.finished ? (
+            <div className="panel kpi"><div className="label">People in view</div>
+              <div className="value">{summary.people_now_mean ?? "–"}</div>
+              <div className="sub">on screen on average (session finished)</div></div>
+          ) : (
+            <div className="panel kpi"><div className="label">People in view now</div>
+              <div className="value">{summary.people_now ?? "–"}</div>
+              <div className="sub">on screen in the last second</div></div>
+          )}
+          <div className="panel kpi"><div className="label">Total people</div>
+            <div className="value">{summary.people_total ?? "–"}</div>
+            <div className="sub">different people seen for {summary.people_min_s} s or more · an estimate:
+              one person can count twice if tracking loses them</div></div>
           <div className="panel kpi"><div className="label">Customers in</div>
             <div className="value" style={{ color: "var(--in)" }}>{summary.cust_in}</div>
             <div className="sub">crossed the line towards the IN side</div></div>
@@ -120,6 +135,23 @@ export default function CameraPage() {
             <LineChart rows={occ} yLabel="average people in zone"
               series={zones.map((z, i) => ({ key: z, label: z, color: ZONE_COLORS[i % ZONE_COLORS.length] }))} />
           ) : <p className="muted">This camera has no zones.</p>}
+        </div>
+      </div>
+
+      <div className="grid two">
+        <div className="panel">
+          <h2>People in view</h2>
+          {people.length ? (
+            <LineChart rows={people} yLabel="people on screen"
+              series={[{ key: "now", label: "In view", color: "var(--series-1)" }]} />
+          ) : <p className="muted">No people counts for this session (only runs from this version on have them).</p>}
+        </div>
+        <div className="panel">
+          <h2>Total people so far</h2>
+          {people.length ? (
+            <LineChart rows={people} step yLabel="people"
+              series={[{ key: "total", label: "Total", color: "var(--series-2)" }]} />
+          ) : <p className="muted">No people counts for this session.</p>}
         </div>
       </div>
 

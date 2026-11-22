@@ -34,6 +34,7 @@ with `DASHBOARD_PORT`), and Postgres is on host port **55432**.
 | `sessions` | pipeline run on one source | `session_id`, `camera_id`, `source`, `video_fps`, `run_info`, `summary` |
 | `events` | analytics event | `session_id`, `frame`, `ts`, `type`, `track_id`, `direction`, `zone`, `value`, `staff` |
 | `heatmaps` | session | `grid` (person-seconds), `cell`, `floor`, `background` (PNG) |
+| `people_samples` | session, second | `now` (people in view, mean over the second), `total` (people so far: track IDs seen ≥ 3 s) |
 
 **Why sessions:** each dataset video has its own timeline starting at 0 s and no real
 clock time. A session keeps every time on **its own video timeline**, and the dashboard
@@ -65,12 +66,14 @@ empty-store frame.
 | DELETE | `/api/cameras/{id}` | ops, tests | remove a camera and all its data |
 | POST | `/api/sessions` | pipeline | start a session → `session_id` |
 | POST | `/api/sessions/{id}/events` | pipeline | batch of events (unknown types → 422) |
+| POST | `/api/sessions/{id}/people` | pipeline | people in view / total people, one sample per second |
 | POST | `/api/sessions/{id}/finish` | pipeline | summary, heatmap grid, background PNG |
 | GET | `/api/cameras` | dashboard | cameras with customer totals over all sessions |
 | GET | `/api/cameras/{id}/sessions` | dashboard | sessions with totals |
 | GET | `/api/sessions/{id}/summary` | dashboard | IN/OUT (customers and all), staff/static tracks, dwell per zone |
 | GET | `/api/sessions/{id}/counts?bucket_s=10` | dashboard | IN/OUT per bucket |
 | GET | `/api/sessions/{id}/occupancy?bucket_s=5` | dashboard | average people per zone per bucket |
+| GET | `/api/sessions/{id}/people?bucket_s=5` | dashboard | people in view (mean) and total so far per bucket |
 | GET | `/api/sessions/{id}/heatmap` | dashboard | grid + metadata |
 | GET | `/api/sessions/{id}/background.png` | dashboard | people-free background |
 

@@ -18,6 +18,7 @@ Outputs written to `out_dir`:
                 different settings WITHOUT re-running the detector.
   events.csv    line crossings, zone visits, staff / static flags
   transitions.csv  zone-to-zone moves of customers (from_zone, to_zone, people)
+  people.csv    per second of video: people in view (mean) and total people so far (people.py)
   heatmap.npy   raw person-seconds grid;  heatmap.png  rendered over a people-free background
   summary.json  configuration, counts, zone summary and timing for this run
   annotated.mp4 optional, with --save-video (heads blurred with --blur-heads)
@@ -43,6 +44,7 @@ from retailflow.counting import IN, OUT, CountingConfig, LineCounter
 from retailflow.detector import PersonTracker
 from retailflow.events import CsvEventWriter, Event, MultiSink
 from retailflow.heatmap import Heatmap, blend_overlay, median_background, overlay_colors
+from retailflow.people import MIN_PERSON_S, PeopleCounter
 from retailflow.privacy import blur_heads
 from retailflow.sources import FrameSource
 from retailflow.staff import StaffFilter
@@ -201,6 +203,19 @@ class Pipeline:
         use_overlay = self.heat_overlay or self.preview is not None
         track_end_gap = max(1, round(TRACK_END_S * fps))
         self.static_ids: set[int] = set()
+        people_n = PeopleCounter(fps)
+        people_f = open(self.out_dir / "people.csv", "w", newline="")
+        people_w = csv.writer(people_f)
+        people_w.writerow(["t", "now", "total"])
+        samples: list[dict] = []
+
+        def emit(new: list[dict]) -> None:
+            for smp in new:
+                samples.append(smp)
+                people_w.writerow([smp["t"], smp["now"], smp["total"]])
+                for sink in self.sinks:
+                    if hasattr(sink, "people"):
+                        sink.people(smp)
 
         band = self.counter.band
         proc_ms: list[float] = []   # detect + track + analytics per frame
@@ -260,6 +275,7 @@ class Pipeline:
                 buffers.setdefault(p.track_id, _TrackBuffer()).add(fi, p, heat, step)
             for tid in [t for t, b in buffers.items() if fi - b.last_frame > track_end_gap]:
                 self._close_track(tid, buffers.pop(tid), heat, staff, events, fi, ts)
+            emit(people_n.update(fi, list(feet), set(staff.staff) | self.static_ids))
             proc_ms.append((time.perf_counter() - t0) * 1000)
             n += 1
 
@@ -285,7 +301,7 @@ class Pipeline:
                 draw.draw_people(img, people, self.counting.point, staff.staff)
                 rate = 1000 / (sum(proc_ms[-30:]) / len(proc_ms[-30:]))
                 draw.draw_hud(img, [f"IN {self.counter.counts[IN]}   OUT {self.counter.counts[OUT]}",
-                                    f"people {len(people)}   {rate:.0f} FPS",
+                                    f"people now {len(people)}   total {people_n.total(set(staff.staff) | self.static_ids)}   {rate:.0f} FPS",
                                     f"t={fi / fps:.1f}s (video time)"])
                 if writer is not None:
                     writer.write(img)
@@ -304,6 +320,9 @@ class Pipeline:
         last_ts = frame_time(last_fi)
         for tid in list(buffers):
             self._close_track(tid, buffers.pop(tid), heat, staff, events, last_fi, last_ts)
+        not_counted = set(staff.staff) | self.static_ids
+        emit(people_n.finish(not_counted))
+        people_f.close()
         wall_s = time.perf_counter() - t_start
         events.close()
         tracks_f.close()
@@ -313,7 +332,7 @@ class Pipeline:
             cv2.destroyAllWindows()
 
         # Zone-to-zone movement of customers (staff and static tracks left out).
-        not_customer = set(staff.staff) | self.static_ids
+        not_customer = not_counted
         visits_df = pd.DataFrame([v.__dict__ for v in zones.visits if v.track_id not in not_customer],
                                  columns=["track_id", "zone", "start_frame", "end_frame", "dwell_s", "truncated"])
         steps = transition_counts(visits_df)
@@ -351,6 +370,11 @@ class Pipeline:
             "zone_transitions": {f"{a} -> {b}": k for (a, b), k in steps.most_common()},
             "blur_heads": self.blur,
             "unique_track_ids": len(ids_seen),
+            # people.py: total = track IDs seen >= MIN_PERSON_S, staff and static objects left out
+            "people_total": people_n.total(not_counted),
+            "people_min_s": MIN_PERSON_S,
+            "people_now_mean": round(sum(x["now"] for x in samples) / len(samples), 2) if samples else 0.0,
+            "people_now_max": max((x["now"] for x in samples), default=0.0),
             "avg_proc_ms": round(sum(proc_ms) / max(n, 1), 2),
             # Throughput including decoding and drawing (what a user would see).
             "throughput_fps": round(n / wall_s, 2) if wall_s > 0 else None,

@@ -364,3 +364,8 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   fragments). Leaving out never-moving and < 5 s tracks: test visits 95.8% → 29.6% WAPE offline (127% → 57.7% live),
   global IDF1 0.369 → 0.436. A longer tracker buffer and group consolidation did not help. **Learned:** count IDs a
   person owns, not IDs that touch them; the static rule must use time, not frame counts, when frames are skipped.
+- **People in view now and total people per camera:** `retailflow/people.py`, sent once per second to the API
+  (`people_samples` table) and shown on the camera page (cards and two charts). Total = track IDs seen ≥ 3 s
+  (chosen on dev). Total people WAPE: dev 135.0% → 29.3%, test 312.0% → 61.7% (all IDs → ≥ 3 s); people in
+  view MAE 1.60 (dev) and 0.64 (test) people (doc 10 §3). **Learned:** most extra IDs are sub-second fragments;
+  the rest are long ID breaks, which no time threshold fixes.
