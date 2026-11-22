@@ -143,65 +143,71 @@ def main() -> None:
     next_link = t0 + args.link_every
     result = None
     try:
-        while not all(r.finished for r in readers.values()):
-            if preview is not None and preview.stop_requested:
-                stopped_by_user = True                   # Stop button on the preview page
-                break
-            now = time.perf_counter()
-            frames, index = {}, {}
-            if batch > 1:
-                # One tick for all cameras: the batch keeps the same size from call to call.
-                # (Cameras picked one by one gave a different batch size every call, and each
-                # new size made the TensorRT backend re-allocate: 611 ms per batch instead of ~170.)
-                if now >= due[cams[0]]:
+        try:
+            while not all(r.finished for r in readers.values()):
+                if preview is not None and preview.stop_requested:
+                    stopped_by_user = True                   # Stop button on the preview page
+                    break
+                now = time.perf_counter()
+                frames, index = {}, {}
+                if batch > 1:
+                    # One tick for all cameras: the batch keeps the same size from call to call.
+                    # (Cameras picked one by one gave a different batch size every call, and each
+                    # new size made the TensorRT backend re-allocate: 611 ms per batch instead of ~170.)
+                    if now >= due[cams[0]]:
+                        for c in cams:
+                            got = readers[c].newest()
+                            if got is not None:
+                                index[c], frames[c] = got
+                        due[cams[0]] = max(due[cams[0]] + interval, now)
+                else:
                     for c in cams:
-                        got = readers[c].newest()
-                        if got is not None:
-                            index[c], frames[c] = got
-                    due[cams[0]] = max(due[cams[0]] + interval, now)
-            else:
-                for c in cams:
-                    if now >= due[c]:
-                        got = readers[c].newest()
-                        if got is not None:
-                            index[c], frames[c] = got
-                            due[c] = max(due[c] + interval, now)     # keep the rate, never bunch up
-            if not frames:
-                time.sleep(0.003)
-                continue
-            tb = time.perf_counter()
-            results = mct.update(frames)
-            batch_ms.append((time.perf_counter() - tb) * 1000)
-            batches += 1
-            for c, people in results.items():
-                analysed[c] += 1
-                analysed_frames[c].append(index[c])
-                for q in people:
-                    writers[c].writerow([index[c], q.track_id, f"{q.x1:.1f}", f"{q.y1:.1f}", f"{q.x2:.1f}",
-                                         f"{q.y2:.1f}", f"{q.conf:.3f}"])
-                linker.add(c, index[c], people, frames[c])
-                last_img[c], last_people[c] = frames[c], people
-            if preview is not None:
-                while True:                              # newest store-wide numbers, without waiting
-                    try:
-                        kind, payload = outbox.get_nowait()
-                    except queue.Empty:
-                        break
-                    if kind == "numbers":
-                        numbers = payload
-                if preview.wants_frame():
-                    t_s = max(index.values()) / store.fps
-                    blur = not args.no_blur
-                    if preview.focus in last_img:
-                        view = single(last_img[preview.focus], last_people[preview.focus], numbers,
-                                      preview.focus, t_s, blur)
-                    else:
-                        view = mosaic(last_img, last_people, numbers, cams, t_s, blur=blur)
-                    preview.publish(view)
-                    preview_frames += 1
-            if time.perf_counter() >= next_link:          # hand the new tracks to the linking process
-                inbox.put(("delta", *take_delta(linker, sent)))
-                next_link += args.link_every
+                        if now >= due[c]:
+                            got = readers[c].newest()
+                            if got is not None:
+                                index[c], frames[c] = got
+                                due[c] = max(due[c] + interval, now)     # keep the rate, never bunch up
+                if not frames:
+                    time.sleep(0.003)
+                    continue
+                tb = time.perf_counter()
+                results = mct.update(frames)
+                batch_ms.append((time.perf_counter() - tb) * 1000)
+                batches += 1
+                for c, people in results.items():
+                    analysed[c] += 1
+                    analysed_frames[c].append(index[c])
+                    for q in people:
+                        writers[c].writerow([index[c], q.track_id, f"{q.x1:.1f}", f"{q.y1:.1f}", f"{q.x2:.1f}",
+                                             f"{q.y2:.1f}", f"{q.conf:.3f}"])
+                    linker.add(c, index[c], people, frames[c])
+                    last_img[c], last_people[c] = frames[c], people
+                if preview is not None:
+                    while True:                              # newest store-wide numbers, without waiting
+                        try:
+                            kind, payload = outbox.get_nowait()
+                        except queue.Empty:
+                            break
+                        if kind == "numbers":
+                            numbers = payload
+                    if preview.wants_frame():
+                        t_s = max(index.values()) / store.fps
+                        blur = not args.no_blur
+                        if preview.focus in last_img:
+                            view = single(last_img[preview.focus], last_people[preview.focus], numbers,
+                                          preview.focus, t_s, blur)
+                        else:
+                            view = mosaic(last_img, last_people, numbers, cams, t_s, blur=blur)
+                        preview.publish(view)
+                        preview_frames += 1
+                if time.perf_counter() >= next_link:          # hand the new tracks to the linking process
+                    inbox.put(("delta", *take_delta(linker, sent)))
+                    next_link += args.link_every
+        except KeyboardInterrupt:
+            # Ctrl+C ends the run like the Stop button: link what was seen and save it.
+            # (The linking process ignores Ctrl+C, so it is still there to do the final link.)
+            stopped_by_user = True
+            print("Stopping: saving the results so far...", flush=True)
         wall = time.perf_counter() - t0
         inbox.put(("final", *take_delta(linker, sent)))
         while True:                                      # skip "numbers" messages until the final one

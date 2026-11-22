@@ -371,10 +371,14 @@ def link_worker(store_path: str, cameras: list[str], appearance: bool, api_url: 
     the last 30 s, so the detection process can label boxes in the live camera preview.
     """
     import queue
+    import signal
     import time
 
     from retailflow.sender import StoreApiClient
 
+    # Ctrl+C in the console reaches this process too. Ignore it: the main process stops the
+    # run and still needs this process for the final link (else the run is saved empty).
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     store = load_store(store_path)
     store.cameras = cameras
     lk = StoreLinker(store, appearance=appearance)

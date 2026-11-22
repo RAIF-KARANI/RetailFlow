@@ -251,3 +251,9 @@ Format: **problem → cause → fix**. Newest at the bottom.
 - **Cause:** it ran at the same time as another heavy job; the detector benchmark right after was normal (140 ms
   per 15 frames).
 - **Fix:** rerun alone (5.0 per second); measure live runs with nothing else running.
+
+### A store run stopped with Ctrl+C showed 0 people on the dashboard
+- **Cause:** Ctrl+C raised KeyboardInterrupt inside the detector call and went straight to the error path, so the
+  final link was never done. Ctrl+C also reached the linking process (same console) and ended it.
+- **Fix:** `run_store.py` treats Ctrl+C like the preview's Stop button (final link, then save), and the linking
+  process ignores Ctrl+C. Checked: a 4-camera run stopped after 18 s saved 16 people and showed them on the store page.
