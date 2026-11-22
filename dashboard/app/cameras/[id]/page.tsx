@@ -27,7 +27,9 @@ export default function CameraPage() {
   useEffect(() => {
     const load = () => get<Session[]>(`/api/cameras/${encodeURIComponent(camera)}/sessions`).then((s) => {
       setSessions(s);
-      setSid((cur) => cur || s[0]?.session_id || "");
+      // Default to the newest session (the list itself is grouped by source).
+      const newest = s.reduce<Session | undefined>((a, b) => (!a || b.started_at > a.started_at ? b : a), undefined);
+      setSid((cur) => cur || newest?.session_id || "");
     }, (e) => setErr(String(e)));
     load();
     const t = setInterval(load, 5000);

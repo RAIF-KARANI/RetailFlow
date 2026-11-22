@@ -26,6 +26,7 @@ export type Session = Totals & {
   source: string;
   frames: number | null;
   video_fps: number | null;
+  started_at: string;
   finished_at: string | null;
   run_info: Record<string, unknown>;
 };
