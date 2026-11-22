@@ -6,8 +6,47 @@ import { useEffect, useState } from "react";
 import HeatmapCanvas from "@/components/HeatmapCanvas";
 import LineChart from "@/components/LineChart";
 import { CountRow, fmtTime, get, Heatmap, OccRow, PeopleRow, Session, Summary, Transitions } from "@/lib/api";
+import { runner } from "@/lib/runner";
 
 const ZONE_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
+
+// The running pipeline's annotated video (run.py --preview, heads pixelated), shown on the page.
+function LiveVideo({ camera, url }: { camera: string; url: string }) {
+  const [state, setState] = useState<"idle" | "stopping" | "manual">("idle");
+  const [broken, setBroken] = useState(false);
+  const stop = () => {
+    setState("stopping");
+    // The runner stops runs it started; others are stopped on the preview page itself.
+    runner.stop(camera).catch(() => setState("manual"));
+  };
+  return (
+    <div className="panel grid" style={{ gap: 10 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h2 style={{ margin: 0 }}>Live video <span className="live-tag">live</span></h2>
+        <div className="row">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="muted">Open full size</a>
+          <button className="danger" onClick={stop} disabled={state !== "idle"}>
+            {state === "stopping" ? "Stopping… (saving results)" : "Stop"}
+          </button>
+        </div>
+      </div>
+      {state === "manual" && (
+        <p className="muted" style={{ margin: 0 }}>
+          This run was not started from the dashboard: stop it with the Stop button on the{" "}
+          <a href={url} target="_blank" rel="noopener noreferrer">preview page</a>, or Ctrl+C in its PowerShell window.
+        </p>
+      )}
+      {broken ? (
+        <p className="muted" style={{ margin: 0 }}>The live video is not reachable from this browser (it is served on this computer only).</p>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="live-video" src={`${url.replace(/\/?$/, "/")}stream`} alt={`Live video of ${camera}, heads pixelated`}
+             onError={() => setBroken(true)} />
+      )}
+      <p className="muted" style={{ margin: 0 }}>Boxes, feet points, counting line and zones from the running pipeline; heads are pixelated.</p>
+    </div>
+  );
+}
 
 export default function CameraPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +61,10 @@ export default function CameraPage() {
   const [heat, setHeat] = useState<Heatmap | null>(null);
   const [trans, setTrans] = useState<Transitions | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [uploaded, setUploaded] = useState(false);
+
+  // Uploaded from the dashboard (Add camera)? Then its setup page can be opened again.
+  useEffect(() => { runner.video(camera).then(() => setUploaded(true), () => setUploaded(false)); }, [camera]);
 
   // Session list (refreshes so a live session appears).
   useEffect(() => {
@@ -94,6 +137,15 @@ export default function CameraPage() {
         </div>
       </div>
       {err && <p className="error">{err}</p>}
+
+      {summary && !summary.finished && typeof summary.run_info.preview_url === "string" && (
+        <LiveVideo camera={camera} url={summary.run_info.preview_url} />
+      )}
+      {uploaded && (
+        <p className="muted" style={{ margin: 0 }}>
+          Added from the dashboard: <Link href={`/setup/${encodeURIComponent(camera)}`}>change the line and zones, or start it live again</Link>.
+        </p>
+      )}
 
       {summary && (
         <div className="grid kpis">

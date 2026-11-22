@@ -369,3 +369,4 @@ showing counts, zones, dwell and heatmaps. Everything runs with Docker Compose.
   (chosen on dev). Total people WAPE: dev 135.0% → 29.3%, test 312.0% → 61.7% (all IDs → ≥ 3 s); people in
   view MAE 1.60 (dev) and 0.64 (test) people (doc 10 §3). **Learned:** most extra IDs are sub-second fragments;
   the rest are long ID breaks, which no time threshold fixes.
+- **Add camera from the dashboard:** `runner.py` (host, port 8095, standard library) plus three pages: upload a video (`/cameras/new`), draw the line, IN side and zones on a frame (`/setup/[id]`), start it live; the camera page shows the live video with a Stop button. Checked end to end in the browser on a CAVIAR clip: setup saved the same line as `scenes/caviar_front.json`, the live session opened by itself, Stop closed it with its counts. **Learned:** on Windows `terminate()` leaves a child FFmpeg running; end the whole process tree.

@@ -98,12 +98,33 @@ Charts are plain SVG and the heatmap is a `<canvas>`, so there is no chart libra
 
 | Page | Shows |
 |---|---|
-| `/` | Every camera: sessions, video analysed, customers in/out, zones |
-| `/cameras/[id]` | Session picker; KPIs (customers in/out, crossings excluded as staff/static, video length and model); IN/OUT per bucket; zone occupancy over time; dwell table (visits, mean, median, longest, in zone now); heatmap over the background |
+| `/` | Every camera: sessions, video analysed, customers in/out, zones; **+ Add camera** button |
+| `/cameras/new` | Add camera, step 1: name the camera and upload its video (needs the runner, below) |
+| `/setup/[id]` | Step 2: draw the counting line, the IN side and zones on one frame (any frame number), save `scenes/<camera>.json`, then **Start live** for N minutes (0 = until stopped) |
+| `/cameras/[id]` | Live video of the running pipeline on the page (heads pixelated) with a **Stop** button; session picker; KPIs (customers in/out, crossings excluded as staff/static, video length and model); IN/OUT per bucket; zone occupancy over time; dwell table (visits, mean, median, longest, in zone now); heatmap over the background |
 
 - A session that is still running is marked **live** and refreshes every 5 s.
 - Every time axis is **video time (m:ss)**. There are no business hours, because the data has none.
 - Light and dark mode follow the system setting.
+
+### Add camera from the dashboard: the host runner (`runner.py`)
+
+The pipeline needs the GPU, so it runs on the host, not in Docker. `python runner.py` starts a small
+standard-library server on `127.0.0.1:8095` that the dashboard calls:
+
+| Endpoint | Does |
+|---|---|
+| `POST /api/cameras/<cam>/video?filename=x.mp4` | Body = the raw video. Saved to `data/uploads/<cam>.<ext>` after OpenCV decodes 2 frames. An existing upload is replaced only with `&replace=1`. Up to 8 GB |
+| `GET /api/cameras/<cam>/frame?n=50` | One frame as JPEG, for drawing |
+| `GET`/`PUT /api/cameras/<cam>/scene` | Read (or a default) / save `scenes/<cam>.json`, checked by `retailflow.config` |
+| `POST /api/cameras/<cam>/start` `{"minutes": 5}` | Loops the video as `rtsp://127.0.0.1:8554/<cam>` (`tools/simulate_rtsp.py`, as `demo.ps1`), then `run.py --api --preview <free port 8090-8109> --blur-heads`, outputs in `outputs/web/<cam>/` (log: `run.log`) |
+| `POST /api/cameras/<cam>/stop` | The preview's Stop (outputs and summary saved as normal); force after 30 s |
+| `GET /api/cameras/<cam>/run` | starting / running / stopping / finished / failed, preview URL, last log lines |
+
+- Listens on 127.0.0.1 only; writes are refused from any origin other than the dashboard's (`RUNNER_ORIGINS`).
+- Camera names: letters, digits, `_`, `-`, up to 48 characters (no paths).
+- Runs are kept in memory: restarting the runner asks its runs to stop.
+- Tests: `tests/test_runner.py` (upload, frame, scene save, bad input, other origins).
 
 ## 6. Tests
 
@@ -111,6 +132,7 @@ Charts are plain SVG and the heatmap is a `<canvas>`, so there is no chart libra
 |---|---|
 | `tests/test_backend_analytics.py` | bucketing, visit pairing (closed and open), time-weighted occupancy, dwell stats |
 | `tests/test_sender.py` | camera and session registration, batching, retry after failure without hammering, `localhost` rewrite, finish payload |
+| `tests/test_runner.py` | Add camera runner: upload, duplicate names, frame, default and saved scene, rejected names / file types / images renamed `.mp4` / invalid scenes, other origins refused |
 | `tests/test_api_integration.py` | real API + Postgres: staff and mannequin flags excluded retroactively from counts and zones, buckets, occupancy, heatmap, validation errors. Skipped if the API is not running. |
 
 ## 7. Not done (scope)

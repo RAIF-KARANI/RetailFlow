@@ -23,7 +23,10 @@ export default function Home() {
   return (
     <div className="grid" style={{ gap: 20 }}>
       <div>
-        <h1>Cameras</h1>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h1>Cameras</h1>
+          <Link href="/cameras/new" className="watch">+ Add camera</Link>
+        </div>
         <p className="muted">
           Customers only: tracks flagged as staff or as static objects (mannequins) are excluded.
           Each session is one video or stream, on its own video timeline.
@@ -76,7 +79,7 @@ export default function Home() {
               </tr>
             ))}
             {cams?.length === 0 && (
-              <tr><td colSpan={6} className="muted">No cameras yet. Run <code>python run.py ... --api http://localhost:8000</code>.</td></tr>
+              <tr><td colSpan={6} className="muted">No cameras yet. Click <b>Add camera</b> to upload a video.</td></tr>
             )}
           </tbody>
         </table>

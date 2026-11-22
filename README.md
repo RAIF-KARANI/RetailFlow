@@ -77,6 +77,7 @@ python run.py --source data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg `
 .\demo.ps1                                            # then http://localhost:3001
 .\demo.ps1 -Preview                                   # + annotated live video at http://127.0.0.1:8090
 python run_store.py --store scenes/stores/smartspaces_071.json --api http://127.0.0.1:8000 --preview   # 15-camera store live
+python runner.py                                      # then Add camera on the dashboard: upload, draw, go live
 
 # Optional: TensorRT FP16 engines (about 2x faster; built for this GPU)
 pip install -r requirements-export.txt
@@ -84,7 +85,7 @@ python tools/export_models.py
 ```
 
 `run.py` uses the TensorRT engine automatically once it has been built (`--backend auto`),
-and PyTorch otherwise. Tests: `pytest -q` (128 tests; the API integration test runs when the stack is up).
+and PyTorch otherwise. Tests: `pytest -q` (131 tests; the API integration test runs when the stack is up).
 
 ## How it works
 

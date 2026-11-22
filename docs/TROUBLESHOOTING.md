@@ -257,3 +257,12 @@ Format: **problem → cause → fix**. Newest at the bottom.
   final link was never done. Ctrl+C also reached the linking process (same console) and ended it.
 - **Fix:** `run_store.py` treats Ctrl+C like the preview's Stop button (final link, then save), and the linking
   process ignores Ctrl+C. Checked: a 4-camera run stopped after 18 s saved 16 people and showed them on the store page.
+
+### Add camera: FFmpeg kept streaming after Stop
+- **Cause:** the runner ended `tools/simulate_rtsp.py` with `terminate()`; on Windows that kills only that
+  process, so its FFmpeg child kept publishing the RTSP stream.
+- **Fix:** `runner.kill_tree` ends the whole process tree (`taskkill /T /F`).
+
+### Add camera: an image renamed .mp4 was accepted as a video
+- **Cause:** OpenCV opens a single JPEG as a one-frame "video" (frame count -9.2e18).
+- **Fix:** an upload must decode 2 frames; nonsense frame counts are reported as unknown.
