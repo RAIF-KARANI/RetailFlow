@@ -121,7 +121,7 @@ profile. Draw it with `python tools/setup_scene.py`. Details: [doc 02](docs/02_A
 | [09 Evaluation method](docs/09_EVALUATION_METHOD.md) | Ground truth, dev/test split, metrics |
 | [10 Results](docs/10_RESULTS.md) | All result tables |
 | [11 Multi-camera](docs/11_MULTI_CAMERA.md) | Clock sync of two views, two-camera fusion, cross-camera IDs |
-| [12 Demo](docs/12_DEMO.md) | Three ways to see it working |
+| [12 Demo](docs/12_DEMO.md) | Ways to see it working, Add camera from the dashboard, the recorded walkthrough |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Every problem met, its cause and fix |
 
 ## Repository layout
@@ -129,12 +129,14 @@ profile. Draw it with `python tools/setup_scene.py`. Details: [doc 02](docs/02_A
 ```
 retailflow/        the library: sources, detector, counting, zones, heatmap, staff, privacy, pipeline, sender, ...
 run.py             one camera (file, folder or RTSP)          run_multi.py   N live streams at once
+run_store.py       a whole store live (15 cameras)            runner.py      host server behind the dashboard's Add camera
 benchmark.py       detector/tracker runs over all datasets     evaluate*.py   scoring against ground truth
 scenes/            one JSON per camera (+ sites/ for multi-camera)
 trackers/          tracker configs (BoT-SORT + ReID, BoT-SORT without GMC)
 backend/           FastAPI + SQL schema                         dashboard/     Next.js
 tools/             downloads, scene editor, exports, RTSP simulator, clock sync, checks
-tests/             124 tests                                     docs/          everything above
+tests/             131 tests                                     docs/          everything above
+demo_video/        recorded walkthrough, 4:18 (git-ignored)      video_guide/   step-by-step command guide (git-ignored)
 ```
 
 ## Data acknowledgements and licences

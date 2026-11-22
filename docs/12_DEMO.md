@@ -1,6 +1,6 @@
 # 12 · Demo walkthrough
 
-Three ways to see RetailFlow working, from fastest to fullest. Everything runs on public
+Ways to see RetailFlow working, from fastest to fullest, plus a recorded walkthrough (end of this doc). Everything runs on public
 research videos. All numbers below come from runs on the development laptop (RTX 4060 Laptop).
 
 Before you start: the setup steps in the README, and at least CAVIAR downloaded
@@ -101,6 +101,20 @@ people table and camera-to-camera moves. With `models/yolo26m_960_b16.engine` bu
 detector as one batch (doc 11 §8).
 The store is synthetic, and live IDs are far from perfect (doc 11 §8): one person often gets several numbers.
 
+## E. Add a camera from the dashboard (no commands)
+
+The pipeline needs the GPU, so a small host server starts it for the dashboard (doc 07, "Add camera"):
+
+```powershell
+python runner.py                                      # leave it running; http://127.0.0.1:8095
+```
+
+Then on <http://localhost:3001>: **+ Add camera** → pick a video and a camera name → **Upload and set up** →
+draw the counting line (2 clicks), the IN side (1 click) and any zones on one frame → **Save scene** →
+**Run for** N minutes (0 = until stopped) → **▶ Start live**. The camera page opens by itself once the first
+numbers arrive, with the live video on the page (heads pixelated) and a **Stop** button that saves the results.
+Uploads go to `data/uploads/`, scenes to `scenes/<camera>.json`, outputs to `outputs/web/<camera>/`.
+
 ## C. Reproduce the evaluation (hours of GPU time)
 
 ```powershell
@@ -111,7 +125,7 @@ python evaluate.py  --configs n640_bytetrack final --group camera     # counting
 python evaluate_zones.py                                              # zones, dwell, heatmaps
 python tools/sync_caviar_views.py; python evaluate_multicam.py        # multi-camera
 python run_multi.py --n 4 --seconds 60 --cams data/caviar/TwoEnterShop1front/TwoEnterShop1front.mpg
-pytest -q                                                             # 124 tests
+pytest -q                                                             # 131 tests
 ```
 
 `docs/09_EVALUATION_METHOD.md` defines every metric; `docs/10_RESULTS.md` has all the tables.
@@ -121,3 +135,10 @@ pytest -q                                                             # 124 test
 `outputs/demo/video_front.mp4`, `video_cor.mp4` and `video_mot20.mp4` (H.264, 1–15 MB, heads
 pixelated) were made with mode A. They are not committed: `outputs/` is git-ignored, and the
 videos are derived from the datasets, so they are regenerated rather than redistributed.
+
+**Recorded walkthrough (4:18).** `demo_video/RetailFlow Demo - with music.mp4` and `... - no music.mp4`:
+four screen recordings of this machine edited into one film with captions (one camera live → set up a
+camera → the whole store → Add camera). Every number in a caption is read off the recordings. The music
+is original (generated in code, no third-party audio). Like `outputs/`, `demo_video/` is git-ignored
+(about 90 MB each). The step-by-step command guide used while recording is in `video_guide/`, also
+git-ignored (personal notes with local paths).

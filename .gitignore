@@ -31,3 +31,7 @@ Thumbs.db
 
 *.tsbuildinfo
 next-env.d.ts
+
+# --- Demo video and the personal how-to guide (kept locally, not in the repo) ---
+demo_video/
+video_guide/
